@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         크랙 AI 답변 커스텀(제미나이API & Firebase 통합) - 완벽 안정화 패치
 // @namespace    http://tampermonkey.net/
-// @version      3.3.5
-// @description  구버전(17.0) 기반 안정성 통합, 저장 시 버튼 사라짐 완벽 해결, 꾹 눌러서 드래그 지원
+// @version      3.3.6
+// @description  구버전(17.0)의 안정적인 터치 로직 이식, 버튼 증발 및 먹통(프리징) 오류 완전 해결
 // @match        https://crack.wrtn.ai/*
 // @grant        GM_addStyle
 // @grant        GM_setValue
@@ -31,22 +31,22 @@
   // 1. 스타일 세팅
   // =============================================
   GM_addStyle(`
-        /* 🌟 플로팅 설정 버튼 (구버전 방식 이식) */
+        /* 🌟 플로팅 설정 버튼 (구버전 방식 이식 + 버튼 태그로 변경하여 모바일 터치 개선) */
         #crack-floating-btn {
             position: fixed; top: 120px; right: 20px; z-index: 999998;
             background-color: var(--surface_brand_primary, #ff4a4a); color: white;
-            padding: 10px 16px; border-radius: 50px;
+            padding: 10px 16px; border-radius: 50px; border: none;
             box-shadow: 0 4px 12px rgba(0,0,0,0.3);
             font-size: 13px; font-weight: bold; font-family: var(--font-sans);
             display: flex; align-items: center; justify-content: center; gap: 6px;
             cursor: pointer; user-select: none; transition: background-color 0.2s;
-            touch-action: none;
+            touch-action: none; 
         }
         #crack-floating-btn.dragging {
             transition: none !important; opacity: 0.8; transform: scale(1.05);
         }
 
-        /* 채팅창 내 매직 버튼 */
+        /* 채팅창 내 매직 버튼 및 위젯 */
         .crack-right-group { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
         .crack-pure-magic {
             height: 1.75rem; width: 1.75rem; min-width: 1.75rem; border-radius: 9999px;
@@ -145,15 +145,13 @@
     `);
 
   // =============================================
-  // 2. 패널 및 플로팅 버튼 DOM 생성 (단 1회만 실행!)
+  // 2. 패널 메인 DOM 생성 (단 1회 생성하여 기억력/상태 완벽 보존)
   // =============================================
   let loreSlotsHTML = "";
   for (let i = 1; i <= 10; i++) {
     loreSlotsHTML += `
             <details class="lore-details">
-                <summary class="lore-summary">
-                    <label onclick="event.stopPropagation()"><input type="checkbox" id="lore-active-${i}"> 세계관 규칙 ${i}</label>
-                </summary>
+                <summary class="lore-summary"><label onclick="event.stopPropagation()"><input type="checkbox" id="lore-active-${i}"> 세계관 규칙 ${i}</label></summary>
                 <textarea id="lore-text-${i}" class="expand-input" rows="2" placeholder="이 규칙은 AI가 절대적으로 따릅니다..." style="margin-top: 8px;"></textarea>
             </details>
         `;
@@ -163,7 +161,7 @@
   panel.id = "crack-ai-panel";
   panel.innerHTML = `
         <div class="panel-header" id="panel-drag-handle">
-            <div class="panel-title">✨ AI 설정 (V3.3.5)</div>
+            <div class="panel-title">✨ AI 설정 (V3.3.6)</div>
             <div class="panel-close" id="close-panel">✕</div>
         </div>
         <div class="panel-content">
@@ -284,24 +282,109 @@
             <button id="cfg-save-btn" class="btn-save">글로벌 설정 저장</button>
         </div>
   `;
-  document.body.appendChild(panel);
 
-  const fBtn = document.createElement("div");
+  // =============================================
+  // 3. 플로팅 버튼 생성 및 강력한 터치 이벤트 할당 (v17.0 방식)
+  // =============================================
+  const fBtn = document.createElement("button"); // 모바일 호환을 위해 button 태그 사용
   fBtn.id = "crack-floating-btn";
-  fBtn.innerHTML = `⚙️ <span>AI 설정</span>`;
-  document.body.appendChild(fBtn);
+  fBtn.innerHTML = `⚙️ <span style="pointer-events:none;">AI 설정</span>`;
+  
+  // 저장된 좌표 불러오기 (화면 밖 이탈 방지 로직 적용)
+  let sLeft = GM_getValue("fBtnLeft", null);
+  let sTop = GM_getValue("fBtnTop", null);
+  if (sLeft !== null && sTop !== null && !isNaN(sLeft) && !isNaN(sTop)) {
+      sLeft = Math.max(0, Math.min(sLeft, window.innerWidth - 80)); 
+      sTop = Math.max(0, Math.min(sTop, window.innerHeight - 50));
+      fBtn.style.left = sLeft + "px";
+      fBtn.style.top = sTop + "px";
+      fBtn.style.bottom = "auto";
+      fBtn.style.right = "auto";
+  }
+
+  let isFDragging = false, hasFDragged = false, fPressTimer = null;
+  let fStartX, fStartY, fInitLeft, fInitTop;
+
+  // 🌟 핵심: 0.3초 꾹 누르고 있어야 이동 가능 (클릭 씹힘 완벽 방지)
+  const startFDrag = (e) => {
+      hasFDragged = false;
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      const rect = fBtn.getBoundingClientRect();
+      fStartX = clientX; fStartY = clientY;
+      fInitLeft = rect.left; fInitTop = rect.top;
+
+      clearTimeout(fPressTimer);
+      fPressTimer = setTimeout(() => {
+          isFDragging = true;
+          fBtn.classList.add("dragging");
+      }, 300);
+  };
+
+  const onFDrag = (e) => {
+      if (!isFDragging) {
+          if (e.touches || e.type.includes('mouse')) {
+              const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+              const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+              // 0.3초 전에 손가락이 움직이면 꾹 누르기 취소 (일반 스와이프 보호)
+              if (Math.abs(clientX - fStartX) > 5 || Math.abs(clientY - fStartY) > 5) {
+                  clearTimeout(fPressTimer);
+              }
+          }
+          return;
+      }
+      e.preventDefault();
+      hasFDragged = true;
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      
+      let newLeft = Math.max(0, Math.min(fInitLeft + (clientX - fStartX), window.innerWidth - fBtn.offsetWidth));
+      let newTop = Math.max(0, Math.min(fInitTop + (clientY - fStartY), window.innerHeight - fBtn.offsetHeight));
+      fBtn.style.left = newLeft + "px";
+      fBtn.style.top = newTop + "px";
+      fBtn.style.bottom = "auto";
+      fBtn.style.right = "auto";
+  };
+
+  const stopFDrag = () => {
+      clearTimeout(fPressTimer);
+      if (isFDragging) {
+          isFDragging = false;
+          fBtn.classList.remove("dragging");
+          GM_setValue("fBtnLeft", parseInt(fBtn.style.left));
+          GM_setValue("fBtnTop", parseInt(fBtn.style.top));
+      }
+  };
+
+  fBtn.addEventListener("touchstart", startFDrag, { passive: false });
+  fBtn.addEventListener("touchmove", onFDrag, { passive: false });
+  fBtn.addEventListener("touchend", stopFDrag);
+  fBtn.addEventListener("mousedown", startFDrag);
+  document.addEventListener("mousemove", onFDrag, { passive: false });
+  document.addEventListener("mouseup", stopFDrag);
+
+  // 일반 클릭 시 패널 열기
+  fBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      if (hasFDragged) { hasFDragged = false; return; } // 드래그 시 클릭 판정 무시
+      updateContextDisplay();
+      panel.style.display = (panel.style.display === "flex" || panel.style.display === "block") ? "none" : "flex";
+  });
 
   // =============================================
-  // 3. 패널 드래그 관리
+  // 4. 패널 창 드래그 관리 
   // =============================================
-  const dragHandle = document.getElementById("panel-drag-handle");
+  const dragHandle = panel.querySelector(".panel-header"); // 생성한 객체에서 바로 연결
   let isPanelDragging = false, pStartX, pStartY, pInitLeft, pInitTop;
 
-  let savedLeft = GM_getValue("panelLeft", null);
-  let savedTop = GM_getValue("panelTop", null);
-  if (savedLeft !== null && savedTop !== null && !isNaN(savedLeft) && !isNaN(savedTop)) {
-      panel.style.left = savedLeft + "px";
-      panel.style.top = savedTop + "px";
+  let pSavedLeft = GM_getValue("panelLeft", null);
+  let pSavedTop = GM_getValue("panelTop", null);
+  if (pSavedLeft !== null && pSavedTop !== null && !isNaN(pSavedLeft) && !isNaN(pSavedTop)) {
+      // 패널 역시 화면 밖 이탈 방지
+      pSavedLeft = Math.max(0, Math.min(pSavedLeft, window.innerWidth - 300));
+      pSavedTop = Math.max(0, Math.min(pSavedTop, window.innerHeight - 100));
+      panel.style.left = pSavedLeft + "px";
+      panel.style.top = pSavedTop + "px";
       panel.style.right = "auto";
   }
 
@@ -343,83 +426,6 @@
   document.addEventListener("touchend", stopPanelDrag);
 
   // =============================================
-  // 4. 플로팅 버튼 드래그 & 클릭 관리 (v17.0 방식 완벽 이식)
-  // =============================================
-  let sLeft = GM_getValue("fBtnLeft", null);
-  let sTop = GM_getValue("fBtnTop", null);
-  if (sLeft !== null && sTop !== null && !isNaN(sLeft) && !isNaN(sTop)) {
-      fBtn.style.left = sLeft + "px";
-      fBtn.style.top = sTop + "px";
-      fBtn.style.bottom = "auto";
-      fBtn.style.right = "auto";
-  }
-
-  let isFDragging = false, hasFDragged = false, fPressTimer = null;
-  let fStartX, fStartY, fInitLeft, fInitTop;
-
-  const startFDrag = (e) => {
-      hasFDragged = false;
-      const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
-      const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
-      const rect = fBtn.getBoundingClientRect();
-      fStartX = clientX; fStartY = clientY;
-      fInitLeft = rect.left; fInitTop = rect.top;
-
-      // 🌟 핵심: 0.3초 꾹 누르고 있어야 드래그 모드 진입 (스와이프/클릭 오작동 완벽 방지)
-      fPressTimer = setTimeout(() => {
-          isFDragging = true;
-          fBtn.classList.add("dragging");
-      }, 300);
-  };
-
-  const onFDrag = (e) => {
-      if (!isFDragging) {
-          // 살짝 누르고 크게 스와이프하면 타이머 취소 (클릭 씹힘 방지)
-          const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
-          const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
-          if (Math.abs(clientX - fStartX) > 10 || Math.abs(clientY - fStartY) > 10) {
-              clearTimeout(fPressTimer);
-          }
-          return;
-      }
-      e.preventDefault();
-      hasFDragged = true;
-      const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
-      const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
-      
-      let newLeft = Math.max(0, Math.min(fInitLeft + (clientX - fStartX), window.innerWidth - fBtn.offsetWidth));
-      let newTop = Math.max(0, Math.min(fInitTop + (clientY - fStartY), window.innerHeight - fBtn.offsetHeight));
-      fBtn.style.left = newLeft + "px";
-      fBtn.style.top = newTop + "px";
-      fBtn.style.bottom = "auto";
-      fBtn.style.right = "auto";
-  };
-
-  const stopFDrag = () => {
-      clearTimeout(fPressTimer);
-      if (isFDragging) {
-          isFDragging = false;
-          fBtn.classList.remove("dragging");
-          GM_setValue("fBtnLeft", parseInt(fBtn.style.left));
-          GM_setValue("fBtnTop", parseInt(fBtn.style.top));
-      }
-  };
-
-  fBtn.addEventListener("touchstart", startFDrag, { passive: false });
-  fBtn.addEventListener("touchmove", onFDrag, { passive: false });
-  fBtn.addEventListener("touchend", stopFDrag);
-  fBtn.addEventListener("mousedown", startFDrag);
-  document.addEventListener("mousemove", onFDrag, { passive: false });
-  document.addEventListener("mouseup", stopFDrag);
-
-  // 클릭 이벤트 (패널 토글)
-  fBtn.addEventListener("click", () => {
-      if (hasFDragged) { hasFDragged = false; return; } // 드래그 시 클릭 무시
-      updateContextDisplay();
-      panel.style.display = (panel.style.display === "flex" || panel.style.display === "block") ? "none" : "flex";
-  });
-
-  // =============================================
   // 5. 백그라운드 스캐너 및 유틸리티
   // =============================================
   function backgroundScanner() {
@@ -445,8 +451,17 @@
     el.innerText = name ? `[${name}]\n${prof}` : "❌ 프로필 선택창을 한 번 열어주세요.";
   }
 
+  document.getElementById("cfg-pc-note").addEventListener("input", (e) => {
+    const room = getChatRoomId();
+    GM_setValue("cfgPcNote_" + room, e.target.value);
+  });
+  document.getElementById("cfg-custom-rule").addEventListener("input", (e) => {
+    const room = getChatRoomId();
+    GM_setValue("cfgCustomRule_" + room, e.target.value);
+  });
+
   // =============================================
-  // 6. 설정 폼 이벤트 및 저장
+  // 6. 설정 이벤트 & UI 토글
   // =============================================
   const egoSlider = document.getElementById("cfg-ego");
   const egoDesc = document.getElementById("ego-desc");
@@ -459,9 +474,8 @@
   ];
 
   const toggleProviderUI = () => {
-    const providerEl = document.getElementById("cfg-api-provider");
-    if (!providerEl) return;
-    if (providerEl.value === "firebase") {
+    const provider = document.getElementById("cfg-api-provider").value;
+    if (provider === "firebase") {
       document.getElementById("cfg-api-key").style.display = "none";
       document.getElementById("cfg-firebase-script").style.display = "block";
       document.getElementById("cfg-key-label").innerText = "Firebase Config 복붙창:";
@@ -474,8 +488,6 @@
   document.getElementById("cfg-api-provider").addEventListener("change", toggleProviderUI);
 
   const loadCfg = () => {
-    if (!document.getElementById("cfg-api-provider")) return;
-    
     const room = getChatRoomId();
     document.getElementById("cfg-api-provider").value = GM_getValue("apiProvider", "google");
     document.getElementById("cfg-api-key").value = GM_getValue("apiKey", "");
@@ -521,7 +533,6 @@
   };
 
   document.getElementById("cfg-save-btn").addEventListener("click", (e) => {
-    // 저장 시 에러가 나서 멈추지 않도록 철저한 참조 확인 적용
     const room = getChatRoomId();
     GM_setValue("apiProvider", document.getElementById("cfg-api-provider").value);
     GM_setValue("apiKey", document.getElementById("cfg-api-key").value.trim());
@@ -533,13 +544,13 @@
     GM_setValue("cfgLen", document.getElementById("cfg-len").value);
 
     const modeEl = document.querySelector('input[name="cfg-mode"]:checked');
-    if (modeEl) GM_setValue("cfgMode", modeEl.value);
+    if(modeEl) GM_setValue("cfgMode", modeEl.value);
 
     const povEl = document.querySelector('input[name="cfg-pov"]:checked');
-    if (povEl) GM_setValue("cfgPov", povEl.value);
+    if(povEl) GM_setValue("cfgPov", povEl.value);
     
     GM_setValue("cfgPovName", document.getElementById("cfg-pov-name").value.trim());
-    GM_setValue("cfgEgo", document.getElementById("cfg-ego").value);
+    GM_setValue("cfgEgo", egoSlider.value);
 
     const activeTones = Array.from(document.querySelectorAll(".tone-chip.active")).map((c) => c.dataset.val);
     GM_setValue("cfgTones", JSON.stringify(activeTones));
@@ -548,9 +559,10 @@
       GM_setValue(`loreActive${i}`, document.getElementById(`lore-active-${i}`).checked);
       GM_setValue(`loreText${i}`, document.getElementById(`lore-text-${i}`).value.trim());
     }
-    GM_setValue("cfgMemory", document.getElementById("cfg-memory").value);
 
-    // 🌟 모바일 호환 UX 개선: 팝업창(alert) 제거하고 부드러운 버튼 변경
+    GM_setValue("cfgMemory", document.getElementById("cfg-memory").value);
+    
+    // 🌟 안전한 저장 알림: Alert을 지우고 버튼 자체를 초록색으로 바꿔줍니다 (프리징 방지)
     const saveBtn = e.target;
     const originalText = saveBtn.innerText;
     saveBtn.innerText = "✅ 설정이 저장되었습니다!";
@@ -574,11 +586,15 @@
     });
   });
 
-  document.getElementById("cfg-memory").addEventListener("input", (e) => { document.getElementById("mem-val").innerText = e.target.value; });
-  document.getElementById("cfg-len").addEventListener("input", (e) => { document.getElementById("len-val").innerText = e.target.value; });
-  egoSlider.addEventListener("input", () => { egoDesc.innerText = egoTexts[egoSlider.value - 1]; });
-  document.getElementById("cfg-pc-note").addEventListener("input", (e) => { GM_setValue("cfgPcNote_" + getChatRoomId(), e.target.value); });
-  document.getElementById("cfg-custom-rule").addEventListener("input", (e) => { GM_setValue("cfgCustomRule_" + getChatRoomId(), e.target.value); });
+  document.getElementById("cfg-memory").addEventListener("input", (e) => {
+    document.getElementById("mem-val").innerText = e.target.value;
+  });
+  document.getElementById("cfg-len").addEventListener("input", (e) => {
+    document.getElementById("len-val").innerText = e.target.value;
+  });
+  egoSlider.addEventListener("input", () => {
+    egoDesc.innerText = egoTexts[egoSlider.value - 1];
+  });
 
   document.querySelectorAll(".acc-header").forEach((header) => {
     header.addEventListener("click", () => {
@@ -598,11 +614,15 @@
     try {
       const token = document.cookie.split(";").map((c) => c.trim()).find((c) => c.startsWith("access_token="))?.slice(13);
       const limit = GM_getValue("cfgMemory", 8);
-      const res = await fetch(`${API_BASE}/v3/chats/${path[2]}/messages?limit=${limit}`, { headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } });
+      const res = await fetch(`${API_BASE}/v3/chats/${path[2]}/messages?limit=${limit}`, {
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      });
       const json = await res.json();
       const msgs = (json.data ?? json).messages ?? [];
       return msgs.reverse().map((m) => `[${m.role === "assistant" ? "상대" : "나"}]: ${m.content}`).join("\n\n");
-    } catch (e) { return "(맥락 로드 실패)"; }
+    } catch (e) {
+      return "(맥락 로드 실패)";
+    }
   }
 
   function callGemini(baseText) {
@@ -627,10 +647,13 @@
 
       const activeLores = [];
       for (let i = 1; i <= 10; i++) {
-        if (GM_getValue(`loreActive${i}`, false) && GM_getValue(`loreText${i}`, "")) activeLores.push(GM_getValue(`loreText${i}`, ""));
+        if (GM_getValue(`loreActive${i}`, false) && GM_getValue(`loreText${i}`, "")) {
+          activeLores.push(GM_getValue(`loreText${i}`, ""));
+        }
       }
 
       let povInstruct = pov === "1" ? "1인칭('나') 시점으로 서술" : `${povName || name || "캐릭터"} 중심의 3인칭 시점으로 서술`;
+
       let lenInstruction = `전체 길이를 반드시 ${len}문단 내외로 배분하여 작성하십시오.`;
       if (len == 1) lenInstruction = "전체 길이를 반드시 1문단 이내로 제한하여 아주 짧고 속도감 있게 작성하십시오.";
       else if (len == 5) lenInstruction = "전체 길이를 최소 5~6문단 이상으로 아주 길고 볼륨감 있게 꽉꽉 채워서 작성하십시오. 분량을 아끼지 마십시오.";
@@ -639,11 +662,14 @@
       if (pcNote) sysPrompt += `3. PC(플레이어) 추가 설정: ${pcNote}\n`;
       if (customRule) sysPrompt += `4. 커스텀 규칙: ${customRule} (이 규칙을 최우선으로 반영하세요!)\n`;
       if (activeLores.length > 0) sysPrompt += `5. 절대 세계관: \n${activeLores.join("\n")}\n`;
+
       sysPrompt += `6. 타 캐릭터 조종 방지: 상대방(NPC)의 대사를 임의로 지어내거나 깊은 내면을 서술하지 마십시오. 상대방의 행동은 사용자의 시야에 보이는 객관적이고 짧은 리액션 정도로 제한하십시오.\n`;
 
-      if (mode === "polish") sysPrompt += `7. 작업 모드 (다듬기): 대충 적힌 뼈대 문장의 의도를 정확히 파악하여, 문맥을 매끄럽게 연결하고 선택한 문체에 맞춰 어휘를 고급스럽게 윤문하십시오.\n`;
-      else sysPrompt += `7. 작업 모드 (부풀리기): 전문 웹소설 작가의 화려하고 몰입감 있는 문체로 상황을 풍성하게 묘사하십시오. 피부로 느끼는 공기의 온도, 시선의 떨림 등 오감 묘사와 겉으로 드러나는 행동 이면에 깔린 감정선을 서술하여 씬의 밀도를 극대화하십시오.\n`;
-      
+      if (mode === "polish") {
+        sysPrompt += `7. 작업 모드 (다듬기): 대충 적힌 뼈대 문장의 의도를 정확히 파악하여, 문맥을 매끄럽게 연결하고 선택한 문체에 맞춰 어휘를 고급스럽게 윤문하십시오.\n`;
+      } else {
+        sysPrompt += `7. 작업 모드 (부풀리기): 전문 웹소설 작가의 화려하고 몰입감 있는 문체로 상황을 풍성하게 묘사하십시오. 피부로 느끼는 공기의 온도, 시선의 떨림 등 오감 묘사와 겉으로 드러나는 행동 이면에 깔린 감정선을 서술하여 씬의 밀도를 극대화하십시오.\n`;
+      }
       sysPrompt += `8. 출력 분량 통제: ${lenInstruction}\n`;
 
       let egoInstruction = "9. 대사 개입 및 상황 전개 지시: \n";
@@ -671,8 +697,11 @@
       sysPrompt += `15. 대화의 핑퐁 최적화: 분량을 채우기 위해 불필요한 과거 회상이나 장황한 독백을 남발하지 마십시오. 상대방이 눈앞에 있다면, 상대의 미세한 반응을 살피고 즉각적으로 반응하는 실시간 상호작용에 집중하십시오.\n`;
 
       let userContent = "";
-      if (baseText) userContent = `[이전 맥락]\n${history}\n\n[입력된 뼈대 문장]\n${baseText}\n\n위 내용을 뼈대로 지시사항에 맞춰 집필해.`;
-      else userContent = `[이전 맥락]\n${history}\n\n[자동 이어쓰기 요청]\n사용자의 입력이 없습니다. 위 대화 맥락을 완벽히 읽고, 지시사항(특히 '대사 개입 및 상황 전개 지시' 단계)에 맞춰 당신이 직접 다음 턴(사용자 캐릭터의 반응)을 상상하여 100% 창작해 주십시오.`;
+      if (baseText) {
+        userContent = `[이전 맥락]\n${history}\n\n[입력된 뼈대 문장]\n${baseText}\n\n위 내용을 뼈대로 지시사항에 맞춰 집필해.`;
+      } else {
+        userContent = `[이전 맥락]\n${history}\n\n[자동 이어쓰기 요청]\n사용자의 입력이 없습니다. 위 대화 맥락을 완벽히 읽고, 지시사항(특히 '대사 개입 및 상황 전개 지시' 단계)에 맞춰 당신이 직접 다음 턴(사용자 캐릭터의 반응)을 상상하여 100% 창작해 주십시오.`;
+      }
 
       if (provider === "firebase") {
         const configRaw = GM_getValue("firebaseScript", "");
@@ -685,13 +714,16 @@
           const versionMatch = configRaw.match(/firebasejs\/([0-9.]+)\/firebase-app\.js/);
           if (versionMatch && versionMatch[1]) fbVersion = versionMatch[1];
           const match = configRaw.match(/const\s+firebaseConfig\s*=\s*({[\s\S]*?});/);
-          if (match && match[1]) configObj = new Function("return " + match[1])();
-          else {
+          if (match && match[1]) {
+            configObj = new Function("return " + match[1])();
+          } else {
             const fallbackMatch = configRaw.match(/({[\s\S]*?apiKey[\s\S]*?appId[\s\S]*?})/);
             if (fallbackMatch && fallbackMatch[1]) configObj = new Function("return " + fallbackMatch[1])();
             else throw new Error("형식 오류");
           }
-        } catch (e) { return reject(new Error("Firebase 코드를 해독하지 못했습니다.")); }
+        } catch (e) {
+          return reject(new Error("Firebase 코드를 해독하지 못했습니다. 파이어베이스 홈페이지에서 준 <script> 태그 포함된 코드를 그대로 넣어주세요."));
+        }
 
         try {
           const appUrl = `https://www.gstatic.com/firebasejs/${fbVersion}/firebase-app.js`;
@@ -708,45 +740,73 @@
             const apps = getApps();
             const app = apps.length === 0 ? initializeApp(configObj) : getApp();
             ai = getAI(app, { backend: new VertexAIBackend("global") });
+
             const safetySettings = [
               { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.OFF },
               { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.OFF },
               { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.OFF },
               { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.OFF },
             ];
-            generativeModel = getGenerativeModel(ai, { model: model, safetySettings, systemInstruction: { parts: [{ text: sysPrompt }] }, generationConfig: { temperature: 0.8 }, });
+
+            generativeModel = getGenerativeModel(ai, {
+              model: model,
+              safetySettings,
+              systemInstruction: { parts: [{ text: sysPrompt }] },
+              generationConfig: { temperature: 0.8 },
+            });
           } else {
             const { HarmBlockThreshold, HarmCategory, getVertexAI, getGenerativeModel } = await import(aiUrl);
             const apps = getApps();
             const app = apps.length === 0 ? initializeApp(configObj) : getApp();
             ai = getVertexAI(app);
+
             const safetySettings = [
               { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.OFF },
               { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.OFF },
               { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.OFF },
               { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.OFF },
             ];
-            generativeModel = getGenerativeModel(ai, { model: model, safetySettings, systemInstruction: { parts: [{ text: sysPrompt }] }, generationConfig: { temperature: 0.8 }, });
+
+            generativeModel = getGenerativeModel(ai, {
+              model: model,
+              safetySettings,
+              systemInstruction: { parts: [{ text: sysPrompt }] },
+              generationConfig: { temperature: 0.8 },
+            });
           }
 
           const result = await generativeModel.generateContent(userContent);
           let rawResult = result.response.text().trim();
-          resolve(rawResult.replace(/^```[^\n]*\n([\s\S]*?)\n```\s*$/m, "$1").trim());
-        } catch (e) { reject(new Error("Firebase Vertex 통신 실패: " + e.message)); }
+          rawResult = rawResult.replace(/^```[^\n]*\n([\s\S]*?)\n```\s*$/m, "$1").trim();
+          resolve(rawResult);
+        } catch (e) {
+          reject(new Error("Firebase Vertex 통신 실패: " + e.message));
+        }
       } else {
         const key = GM_getValue("apiKey", "");
         if (!key) return reject(new Error("설정에서 API 키를 먼저 입력해주세요!"));
+
         GM_xmlhttpRequest({
           method: "POST",
           url: `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
           headers: { "Content-Type": "application/json" },
-          data: JSON.stringify({ system_instruction: { parts: [{ text: sysPrompt }] }, contents: [{ parts: [{ text: userContent }] }], generationConfig: { temperature: 0.8 }, }),
+          data: JSON.stringify({
+            system_instruction: { parts: [{ text: sysPrompt }] },
+            contents: [{ parts: [{ text: userContent }] }],
+            generationConfig: { temperature: 0.8 },
+          }),
           onload: (res) => {
             try {
               const data = JSON.parse(res.responseText);
               if (data.error) reject(new Error(data.error.message));
-              else resolve(data.candidates[0].content.parts[0].text.trim().replace(/^```[^\n]*\n([\s\S]*?)\n```\s*$/m, "$1").trim());
-            } catch (e) { reject(new Error("응답 분석 실패")); }
+              else {
+                let raw = data.candidates[0].content.parts[0].text.trim();
+                raw = raw.replace(/^```[^\n]*\n([\s\S]*?)\n```\s*$/m, "$1").trim();
+                resolve(raw);
+              }
+            } catch (e) {
+              reject(new Error("응답 분석 실패"));
+            }
           },
           onerror: () => reject(new Error("네트워크 오류")),
         });
@@ -755,7 +815,7 @@
   }
 
   // =============================================
-  // 8. UI 자동 주입 (매직 버튼 주입 전용)
+  // 8. UI 자동 주입 (채팅창 내 매직 버튼 주입)
   // =============================================
   let currentRoomId = "";
 
@@ -795,8 +855,9 @@
           setter.call(chatInput, textToInsert);
           chatInput.style.height = "auto";
           chatInput.style.height = chatInput.scrollHeight + "px";
-        } else chatInput.innerHTML = `<p>${textToInsert}</p>`;
-        
+        } else {
+          chatInput.innerHTML = `<p>${textToInsert}</p>`;
+        }
         chatInput.dispatchEvent(new Event("input", { bubbles: true }));
         chatInput.focus();
         document.getElementById("history-text").innerText = `${historyIndex + 1}/${generatedHistory.length}`;
@@ -829,22 +890,37 @@
 
       group.appendChild(gBtn);
       group.appendChild(sendBtn);
-      sendBtn.addEventListener("click", () => { generatedHistory = []; historyIndex = -1; hWidget.style.display = "none"; });
+
+      sendBtn.addEventListener("click", () => {
+        generatedHistory = [];
+        historyIndex = -1;
+        hWidget.style.display = "none";
+      });
     }
 
     const chatInput = document.querySelector('.__chat_input_textarea, div[contenteditable="true"], textarea');
     if (chatInput && !chatInput.dataset.historyHooked) {
       chatInput.dataset.historyHooked = "true";
       chatInput.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" && !e.shiftKey) { generatedHistory = []; historyIndex = -1; const w = document.getElementById("crack-history-widget"); if (w) w.style.display = "none"; }
+        if (e.key === "Enter" && !e.shiftKey) {
+          generatedHistory = [];
+          historyIndex = -1;
+          const w = document.getElementById("crack-history-widget");
+          if (w) w.style.display = "none";
+        }
       });
     }
   }
 
-  // 인터벌 실행은 매직버튼 주입과 텍스트 스캐닝만 담당!
+  // =============================================
+  // 9. 불사조 인터벌 (SPA 새로고침 방어)
+  // =============================================
   setInterval(() => {
     backgroundScanner();
     injectUI();
+    // 웹사이트가 DOM을 교체하더라도, 우리가 만든 패널과 버튼 객체는 안전하게 다시 연결됩니다!
+    if (!document.body.contains(panel)) document.body.appendChild(panel);
+    if (!document.body.contains(fBtn)) document.body.appendChild(fBtn);
   }, 1000);
 
 })();
