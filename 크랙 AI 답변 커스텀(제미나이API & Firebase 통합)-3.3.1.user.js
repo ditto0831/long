@@ -57,8 +57,8 @@
 /* 🌟 채팅창 내부가 아니라 화면 위에 떠 있는 외부 플로팅 버튼 바 */
 #crack-ai-floating-toolbar.crack-right-group {
     position: fixed;
-    right: 24px;
-    bottom: 96px;
+    right: 16px;
+    bottom: 180px;
     z-index: 999998;
     padding: 8px 10px;
     border-radius: 9999px;
@@ -77,7 +77,7 @@
 @media (max-width: 768px) {
     #crack-ai-floating-toolbar.crack-right-group {
         right: 12px;
-        bottom: 84px;
+        bottom: 180px;
         padding: 6px 8px;
     }
 }
@@ -962,44 +962,77 @@
     loadCfg();
   }
 
-  // 1. 설정 버튼(⚙️) 주입: 기존처럼 'model-icon' 옆에 유지
-  const modelBtn = Array.from(document.querySelectorAll("button")).find(
-    (btn) => {
-      return btn.querySelector('img[src*="model-icon"]');
-    },
-  );
+  // 모바일/PC 입력창 탐색 함수
+  const findChatInput = () => {
+    const selectors = [
+      '.__chat_input_textarea',
+      'textarea',
+      'div[contenteditable="true"]',
+      '[contenteditable="true"]',
+      '[role="textbox"]',
+      '[data-lexical-editor="true"]',
+      '[placeholder*="메시지"]',
+      '[aria-label*="메시지"]',
+      '[aria-label*="message"]',
+    ];
 
-  if (modelBtn && !document.getElementById("crack-pure-settings-btn")) {
+    for (const selector of selectors) {
+      const el = document.querySelector(selector);
+      if (el) return el;
+    }
+
+    return null;
+  };
+
+  // 전송 버튼 탐색 함수
+  const findSendButton = () => {
+    const sendBtnIcon = document.querySelector('path[d*="M18.77 11.13"]');
+    if (sendBtnIcon) return sendBtnIcon.closest("button");
+
+    const buttons = Array.from(document.querySelectorAll("button"));
+    return buttons.find((btn) => {
+      const txt = btn.textContent.trim();
+      const aria = btn.getAttribute("aria-label") || "";
+      return (
+        txt.includes("전송") ||
+        txt.includes("보내기") ||
+        aria.includes("전송") ||
+        aria.includes("보내기") ||
+        aria.toLowerCase().includes("send")
+      );
+    });
+  };
+
+  // 1. 플로팅 툴바는 입력창 탐색 성공 여부와 상관없이 무조건 생성
+  let group = document.getElementById("crack-ai-floating-toolbar");
+
+  if (!group) {
+    group = document.createElement("div");
+    group.id = "crack-ai-floating-toolbar";
+    group.className = "crack-right-group";
+    document.body.appendChild(group);
+  }
+
+  // 2. 설정 버튼도 플로팅 툴바에 같이 생성
+  if (!document.getElementById("crack-pure-settings-btn")) {
     const sBtn = document.createElement("button");
     sBtn.id = "crack-pure-settings-btn";
     sBtn.className = "crack-pure-settings";
     sBtn.innerHTML = `⚙️ <span class="setting-btn-text">AI 설정</span>`;
+
     sBtn.onclick = (e) => {
       e.preventDefault();
+      e.stopPropagation();
+
       updateContextDisplay();
-      panel.style.display = panel.style.display === "block" ? "none" : "flex";
+      panel.style.display = panel.style.display === "flex" ? "none" : "flex";
     };
-    modelBtn.parentNode.insertBefore(sBtn, modelBtn);
+
+    group.appendChild(sBtn);
   }
 
-  // 2. 마법 버튼(✨)은 채팅창 내부가 아니라 화면 우측 하단 플로팅 바에 주입
-  const sendBtnIcon = document.querySelector('path[d*="M18.77 11.13"]');
-  const sendBtn = sendBtnIcon ? sendBtnIcon.closest("button") : null;
-
-  const chatInputForButton = document.querySelector(
-    '.__chat_input_textarea, div[contenteditable="true"], textarea',
-  );
-
-  if (chatInputForButton && !document.getElementById("crack-pure-magic-btn")) {
-    let group = document.getElementById("crack-ai-floating-toolbar");
-
-    if (!group) {
-      group = document.createElement("div");
-      group.id = "crack-ai-floating-toolbar";
-      group.className = "crack-right-group";
-      document.body.appendChild(group);
-    }
-
+  // 3. 히스토리 위젯 생성
+  if (!document.getElementById("crack-history-widget")) {
     const hWidget = document.createElement("div");
     hWidget.id = "crack-history-widget";
     hWidget.className = "crack-history-widget";
@@ -1008,8 +1041,14 @@
       <span id="history-text">1/1</span>
       <span class="crack-history-btn" id="history-next">▶</span>
     `;
-    group.appendChild(hWidget);
 
+    group.appendChild(hWidget);
+  }
+
+  const hWidget = document.getElementById("crack-history-widget");
+
+  // 4. 마법 버튼 생성
+  if (!document.getElementById("crack-pure-magic-btn")) {
     const gBtn = document.createElement("button");
     gBtn.id = "crack-pure-magic-btn";
     gBtn.className = "crack-pure-magic";
@@ -1017,27 +1056,34 @@
     gBtn.innerHTML = `<span id="magic-icon" style="font-size: 14px;">✨</span>`;
 
     const updateChatInputFromHistory = () => {
-      const chatInput = document.querySelector(
-        '.__chat_input_textarea, div[contenteditable="true"], textarea',
-      );
+      const chatInput = findChatInput();
       if (!chatInput || generatedHistory.length === 0) return;
 
       const textToInsert = generatedHistory[historyIndex];
 
-      if (chatInput.tagName === "TEXTAREA") {
-        const setter = Object.getOwnPropertyDescriptor(
-          window.HTMLTextAreaElement.prototype,
-          "value",
-        ).set;
+      if (chatInput.tagName === "TEXTAREA" || chatInput.tagName === "INPUT") {
+        const proto =
+          chatInput.tagName === "TEXTAREA"
+            ? window.HTMLTextAreaElement.prototype
+            : window.HTMLInputElement.prototype;
 
-        setter.call(chatInput, textToInsert);
+        const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
+
+        if (setter) {
+          setter.call(chatInput, textToInsert);
+        } else {
+          chatInput.value = textToInsert;
+        }
+
         chatInput.style.height = "auto";
         chatInput.style.height = chatInput.scrollHeight + "px";
       } else {
+        chatInput.focus();
         chatInput.innerHTML = `<p>${textToInsert}</p>`;
       }
 
       chatInput.dispatchEvent(new Event("input", { bubbles: true }));
+      chatInput.dispatchEvent(new Event("change", { bubbles: true }));
       chatInput.focus();
 
       const historyText = document.getElementById("history-text");
@@ -1047,8 +1093,9 @@
       }
     };
 
-    hWidget.querySelector("#history-prev").onclick = (e) => {
+    document.getElementById("history-prev").onclick = (e) => {
       e.preventDefault();
+      e.stopPropagation();
 
       if (historyIndex > 0) {
         historyIndex--;
@@ -1056,8 +1103,9 @@
       }
     };
 
-    hWidget.querySelector("#history-next").onclick = (e) => {
+    document.getElementById("history-next").onclick = (e) => {
       e.preventDefault();
+      e.stopPropagation();
 
       if (historyIndex < generatedHistory.length - 1) {
         historyIndex++;
@@ -1067,17 +1115,19 @@
 
     gBtn.onclick = async (e) => {
       e.preventDefault();
+      e.stopPropagation();
 
-      const chatInput = document.querySelector(
-        '.__chat_input_textarea, div[contenteditable="true"], textarea',
-      );
+      const chatInput = findChatInput();
 
       if (!chatInput) {
-        return alert("채팅 입력창을 찾을 수 없습니다.");
+        alert(
+          "채팅 입력창을 찾을 수 없습니다. 입력창을 한 번 터치한 뒤 다시 눌러주세요.",
+        );
+        return;
       }
 
       const baseText =
-        chatInput.tagName === "TEXTAREA"
+        chatInput.tagName === "TEXTAREA" || chatInput.tagName === "INPUT"
           ? chatInput.value.trim()
           : chatInput.innerText.trim();
 
@@ -1111,7 +1161,9 @@
     group.appendChild(gBtn);
   }
 
-  // 3. 전송 버튼은 원래 자리 그대로 두고, 전송 시 히스토리만 초기화
+  // 5. 전송 버튼 클릭 시 히스토리 초기화
+  const sendBtn = findSendButton();
+
   if (sendBtn && !sendBtn.dataset.historyResetHooked) {
     sendBtn.dataset.historyResetHooked = "true";
 
@@ -1124,10 +1176,8 @@
     });
   }
 
-  // 4. 엔터키 전송 감지도 유지
-  const chatInput = document.querySelector(
-    '.__chat_input_textarea, div[contenteditable="true"], textarea',
-  );
+  // 6. 입력창 엔터 전송 시 히스토리 초기화
+  const chatInput = findChatInput();
 
   if (chatInput && !chatInput.dataset.historyHooked) {
     chatInput.dataset.historyHooked = "true";
