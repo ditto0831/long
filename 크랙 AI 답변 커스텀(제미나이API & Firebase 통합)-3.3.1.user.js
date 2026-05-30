@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         크랙 AI 답변 커스텀(제미나이API & Firebase 통합) - 모바일 완벽 종결 패치
+// @name         크랙 AI 답변 커스텀(제미나이API & Firebase 통합)
 // @namespace    http://tampermonkey.net/
-// @version      3.4.0
-// @description  구버전(17.0) 드래그 로직 100% 이식, 중복 버튼 제거 및 모바일 먹통 현상 해결
+// @version      3.3.1
+// @description  명령어 퀄리티 극대화, 설정 버튼 반응형(모바일) UI 패치, Firebase Vertex API 지원 추가
 // @match        https://crack.wrtn.ai/*
 // @grant        GM_addStyle
 // @grant        GM_setValue
@@ -28,32 +28,65 @@
   }
 
   // =============================================
-  // 1. 스타일 (UI 및 플로팅 최상단 고정)
+  // 1. 스타일 (버튼 반응형 UI 추가)
   // =============================================
   GM_addStyle(`
-        /* 🌟 플로팅 설정 버튼 (구버전 방식 이식 + 최상단 덮어쓰기) */
-        #crack-floating-btn {
-            position: fixed; top: 120px; right: 20px; z-index: 2147483647;
-            background-color: var(--surface_brand_primary, #ff4a4a); color: white;
-            padding: 10px 16px; border-radius: 50px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            font-size: 13px; font-weight: bold; font-family: var(--font-sans);
-            display: flex; align-items: center; justify-content: center; gap: 6px;
-            cursor: pointer; user-select: none; transition: background-color 0.2s;
-            touch-action: none; /* 모바일 브라우저 기본 스와이프 방지 */
+        /* 상단 버튼들 */
+        .crack-pure-settings {
+            height: 2.25rem; padding: 0 0.75rem; border-radius: 8px; border: 1px solid hsl(var(--border));
+            background-color: transparent !important; color: hsl(var(--foreground));
+            font-size: 14px; font-weight: 500; display: inline-flex; align-items: center; justify-content: center;
+            gap: 0.4rem; cursor: pointer; margin-right: 4px; transition: all 0.2s;
+            white-space: nowrap; overflow: hidden;
         }
-        #crack-floating-btn.dragging {
-            transition: none !important; opacity: 0.8; transform: scale(1.05);
+        .crack-pure-settings:hover { background-color: hsl(var(--accent)) !important; }
+
+        /* 🌟 창 크기 줄어들 때 글씨 숨기고 이모지만 남기는 반응형 CSS */
+        @media (max-width: 768px) {
+            .setting-btn-text { display: none; }
+            .crack-pure-settings { padding: 0 0.5rem; gap: 0; }
         }
 
-        /* 채팅창 내 매직 버튼 */
-        .crack-right-group { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+        .crack-right-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+/* 🌟 채팅창 내부가 아니라 화면 위에 떠 있는 외부 플로팅 버튼 바 */
+#crack-ai-floating-toolbar.crack-right-group {
+    position: fixed;
+    right: 24px;
+    bottom: 96px;
+    z-index: 999998;
+    padding: 8px 10px;
+    border-radius: 9999px;
+    border: 1px solid var(--border, rgba(255,255,255,0.14));
+    background: var(--bg_elevated_primary, rgba(24,24,28,0.92));
+    box-shadow: 0 10px 24px rgba(0,0,0,0.32);
+    backdrop-filter: blur(10px);
+}
+
+#crack-ai-floating-toolbar .crack-history-widget {
+    background: transparent;
+    border: none;
+    padding: 0 6px;
+}
+
+@media (max-width: 768px) {
+    #crack-ai-floating-toolbar.crack-right-group {
+        right: 12px;
+        bottom: 84px;
+        padding: 6px 8px;
+    }
+}
         .crack-pure-magic {
             height: 1.75rem; width: 1.75rem; min-width: 1.75rem; border-radius: 9999px;
-            background-color: var(--surface_brand_primary, #ff4a4a); color: white; display: inline-flex; align-items: center; justify-content: center;
+            background-color: #6A3DE8; color: white; display: inline-flex; align-items: center; justify-content: center;
             cursor: pointer; border: none; padding: 0; box-shadow: 0 4px 6px var(--shadow-md); transition: all 0.2s;
         }
-        .crack-pure-magic:hover { transform: scale(1.1); filter: brightness(0.9); }
+        .crack-pure-magic:hover { transform: scale(1.1); background-color: #5228CC; }
 
         .crack-history-widget {
             display: none; align-items: center; gap: 8px;
@@ -63,9 +96,8 @@
         .crack-history-btn { cursor: pointer; color: var(--text_secondary); transition: 0.2s; user-select: none; }
         .crack-history-btn:hover { color: var(--text_brand); transform: scale(1.1); }
 
-        /* AI 패널 설정 */
         #crack-ai-panel {
-            position: fixed; top: 80px; right: 30px; z-index: 2147483647;
+            position: fixed; top: 80px; right: 30px; z-index: 999999;
             width: min(560px, 90vw); max-height: 85vh;
             background-color: var(--bg_screen); border: 1px solid var(--border); border-radius: 16px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.5); color: var(--text_primary); font-family: var(--font-sans);
@@ -75,7 +107,7 @@
         .panel-header {
             padding: 16px 20px; background-color: var(--bg_elevated_primary);
             border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;
-            cursor: move; user-select: none; touch-action: none;
+            cursor: move; user-select: none;
         }
         .panel-title { font-size: 16px; font-weight: 800; color: var(--text_brand); display: flex; align-items: center; gap: 6px; }
         .panel-close { cursor: pointer; font-size: 18px; color: var(--text_secondary); transition: 0.2s; padding: 0 5px; }
@@ -109,7 +141,7 @@
             font-size: 13px; cursor: pointer; color: var(--text_secondary); background: var(--bg_elevated_primary); transition: 0.2s;
         }
         .tone-chip:hover { border-color: var(--text_secondary); }
-        .tone-chip.active { background-color: var(--surface_brand_primary, #ff4a4a); color: white; border-color: transparent; font-weight: bold; }
+        .tone-chip.active { background-color: #6A3DE8; color: white; border-color: #6A3DE8; font-weight: bold; }
 
         .acc-wrapper { display: flex; flex-direction: column; gap: 0; }
         .acc-header {
@@ -137,7 +169,7 @@
         .ego-slider-box { display: flex; flex-direction: column; gap: 6px; padding: 10px; background: var(--bg_elevated_primary); border: 1px solid var(--border); border-radius: 8px; }
         .ego-desc { font-size: 11px; text-align: center; color: var(--text_brand); font-weight: bold; }
 
-        .btn-save { width: 100%; background: var(--surface_brand_primary, #ff4a4a); color: white; border: none; padding: 14px; border-radius: 10px; cursor: pointer; font-weight: 800; font-size: 15px; transition: 0.2s; letter-spacing: 1px; }
+        .btn-save { width: 100%; background: var(--surface_brand_primary); color: white; border: none; padding: 14px; border-radius: 10px; cursor: pointer; font-weight: 800; font-size: 15px; transition: 0.2s; letter-spacing: 1px; }
         .btn-save:hover { opacity: 0.9; transform: translateY(-2px); }
 
         @keyframes crack-spin { 100% { transform: rotate(360deg); } }
@@ -145,7 +177,7 @@
     `);
 
   // =============================================
-  // 2. 패널 및 플로팅 버튼 DOM 생성 (단 1회만 글로벌 생성)
+  // 2. 패널 구성
   // =============================================
   let loreSlotsHTML = "";
   for (let i = 1; i <= 10; i++) {
@@ -163,10 +195,11 @@
   panel.id = "crack-ai-panel";
   panel.innerHTML = `
         <div class="panel-header" id="panel-drag-handle">
-            <div class="panel-title">✨ AI 설정 (V3.4.0)</div>
+            <div class="panel-title">✨ AI 집필 설정 (V3.3)</div>
             <div class="panel-close" id="close-panel">✕</div>
         </div>
         <div class="panel-content">
+
             <div class="setting-group" style="background: var(--bg_elevated_primary); padding: 12px; border-radius: 8px; border: 1px solid var(--border);">
                 <span class="setting-label" style="color: var(--text_brand);">작업 모드 (서술/묘사)</span>
                 <div class="radio-group">
@@ -283,172 +316,124 @@
 
             <button id="cfg-save-btn" class="btn-save">글로벌 설정 저장</button>
         </div>
-  `;
+    `;
   document.body.appendChild(panel);
-
-  const fBtn = document.createElement("div");
-  fBtn.id = "crack-floating-btn";
-  fBtn.innerHTML = `⚙️ <span style="margin-left:2px;">AI 설정</span>`;
-  document.body.appendChild(fBtn);
 
   // =============================================
   // 3. 패널 드래그 관리
   // =============================================
   const dragHandle = document.getElementById("panel-drag-handle");
-  let isPanelDragging = false, pStartX, pStartY, pInitLeft, pInitTop;
+  let isDragging = false,
+    startX,
+    startY,
+    initLeft,
+    initTop;
 
   let savedLeft = GM_getValue("panelLeft", null);
   let savedTop = GM_getValue("panelTop", null);
-  if (savedLeft !== null && savedTop !== null && !isNaN(savedLeft) && !isNaN(savedTop)) {
+  if (savedLeft !== null && savedTop !== null) {
+    if (
+      isNaN(savedLeft) ||
+      isNaN(savedTop) ||
+      savedLeft < 0 ||
+      savedTop < 0 ||
+      savedLeft > window.innerWidth ||
+      savedTop > window.innerHeight
+    ) {
+      GM_deleteValue("panelLeft");
+      GM_deleteValue("panelTop");
+    } else {
       panel.style.left = savedLeft + "px";
       panel.style.top = savedTop + "px";
       panel.style.right = "auto";
+    }
   }
 
-  const startPanelDrag = (e) => {
-    isPanelDragging = true;
-    pStartX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
-    pStartY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+  dragHandle.addEventListener("mousedown", (e) => {
+    isDragging = true;
+    startX = e.clientX;
+    startY = e.clientY;
     const rect = panel.getBoundingClientRect();
-    pInitLeft = rect.left;
-    pInitTop = rect.top;
-  };
+    initLeft = rect.left;
+    initTop = rect.top;
+  });
 
-  const onPanelDrag = (e) => {
-    if (!isPanelDragging) return;
+  document.addEventListener("mousemove", (e) => {
+    if (!isDragging) return;
     e.preventDefault();
-    const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
-    const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
-    
-    let newLeft = Math.max(0, Math.min(pInitLeft + (clientX - pStartX), window.innerWidth - panel.offsetWidth));
-    let newTop = Math.max(0, Math.min(pInitTop + (clientY - pStartY), window.innerHeight - panel.offsetHeight));
+    let newLeft = Math.max(
+      0,
+      Math.min(
+        initLeft + (e.clientX - startX),
+        window.innerWidth - panel.offsetWidth,
+      ),
+    );
+    let newTop = Math.max(
+      0,
+      Math.min(
+        initTop + (e.clientY - startY),
+        window.innerHeight - panel.offsetHeight,
+      ),
+    );
     panel.style.left = newLeft + "px";
     panel.style.top = newTop + "px";
     panel.style.right = "auto";
-  };
+  });
 
-  const stopPanelDrag = () => {
-    if (isPanelDragging) {
-      isPanelDragging = false;
+  document.addEventListener("mouseup", () => {
+    if (isDragging) {
+      isDragging = false;
       GM_setValue("panelLeft", parseInt(panel.style.left));
       GM_setValue("panelTop", parseInt(panel.style.top));
     }
-  };
-
-  dragHandle.addEventListener("mousedown", startPanelDrag);
-  dragHandle.addEventListener("touchstart", startPanelDrag, { passive: true });
-  document.addEventListener("mousemove", onPanelDrag, { passive: false });
-  document.addEventListener("touchmove", onPanelDrag, { passive: false });
-  document.addEventListener("mouseup", stopPanelDrag);
-  document.addEventListener("touchend", stopPanelDrag);
-
-  // =============================================
-  // 4. 플로팅 버튼 드래그 & 클릭 관리 (v17.0 방식 100% 이식)
-  // =============================================
-  let sLeft = GM_getValue("fBtnLeft", null);
-  let sTop = GM_getValue("fBtnTop", null);
-  if (sLeft !== null && sTop !== null && !isNaN(sLeft) && !isNaN(sTop)) {
-      fBtn.style.left = sLeft + "px";
-      fBtn.style.top = sTop + "px";
-      fBtn.style.bottom = "auto";
-      fBtn.style.right = "auto";
-  }
-
-  let isBtnDragging = false, hasBtnDragged = false, btnPressTimer = null;
-  let startX, startY, initialLeft, initialTop;
-  
-  function startBtnDrag(e) {
-      hasBtnDragged = false;
-      const clientX = e.touches ? e.touches[0].clientX : e.clientX; 
-      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-      const rect = fBtn.getBoundingClientRect(); 
-      startX = clientX; startY = clientY; 
-      initialLeft = rect.left; initialTop = rect.top;
-      
-      // 0.4초 꾹 누르고 있어야 이동 가능 (스와이프/클릭 오작동 원천 차단)
-      btnPressTimer = setTimeout(() => { 
-          isBtnDragging = true; 
-          fBtn.classList.add('dragging'); 
-      }, 400);
-  }
-  
-  function doBtnDrag(e) {
-      if (!isBtnDragging) { 
-          clearTimeout(btnPressTimer); 
-          return; 
-      }
-      e.preventDefault(); 
-      hasBtnDragged = true;
-      const clientX = e.touches ? e.touches[0].clientX : e.clientX; 
-      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-      let newLeft = Math.max(0, Math.min(initialLeft + (clientX - startX), window.innerWidth - fBtn.offsetWidth));
-      let newTop = Math.max(0, Math.min(initialTop + (clientY - startY), window.innerHeight - fBtn.offsetHeight));
-      fBtn.style.left = newLeft + 'px'; 
-      fBtn.style.top = newTop + 'px';
-      fBtn.style.right = 'auto'; 
-      fBtn.style.bottom = 'auto';
-  }
-  
-  function endBtnDrag() {
-      clearTimeout(btnPressTimer);
-      if (isBtnDragging) {
-          isBtnDragging = false; 
-          fBtn.classList.remove('dragging');
-          GM_setValue('fBtnLeft', parseInt(fBtn.style.left)); 
-          GM_setValue('fBtnTop', parseInt(fBtn.style.top));
-      }
-  }
-  
-  fBtn.addEventListener('touchstart', startBtnDrag, { passive: false });
-  fBtn.addEventListener('touchmove', doBtnDrag, { passive: false });
-  fBtn.addEventListener('touchend', endBtnDrag);
-  fBtn.addEventListener('mousedown', startBtnDrag);
-  document.addEventListener('mousemove', doBtnDrag, { passive: false });
-  document.addEventListener('mouseup', endBtnDrag);
-
-  // 일반 클릭 시 패널 열기/닫기
-  fBtn.addEventListener('click', () => {
-      if (hasBtnDragged) { hasBtnDragged = false; return; }
-      updateContextDisplay();
-      panel.style.display = (panel.style.display === 'block' || panel.style.display === 'flex') ? 'none' : 'flex';
   });
 
-
   // =============================================
-  // 5. 백그라운드 스캐너 및 유틸리티
+  // 4. 백그라운드 스캐너
   // =============================================
   function backgroundScanner() {
     const room = getChatRoomId();
-    const currentBadge = Array.from(document.querySelectorAll("p")).find(p => p.textContent.trim() === "현재");
+    const currentBadge = Array.from(document.querySelectorAll("p")).find(
+      (p) => p.textContent.trim() === "현재",
+    );
     if (currentBadge) {
-      const container = currentBadge.closest('div[cursor="pointer"]') || currentBadge.parentElement?.parentElement?.parentElement;
+      const container =
+        currentBadge.closest('div[cursor="pointer"]') ||
+        currentBadge.parentElement?.parentElement?.parentElement;
       if (container) {
         const nameEl = container.querySelector('p[color="text_primary"]');
         const profileEl = container.querySelector('p[color="text_secondary"]');
-        if (nameEl) GM_setValue("scannedCharName_" + room, nameEl.textContent.trim());
-        if (profileEl) GM_setValue("scannedCharProfile_" + room, profileEl.textContent.trim());
+        if (nameEl)
+          GM_setValue("scannedCharName_" + room, nameEl.textContent.trim());
+        if (profileEl)
+          GM_setValue(
+            "scannedCharProfile_" + room,
+            profileEl.textContent.trim(),
+          );
       }
     }
   }
 
   function updateContextDisplay() {
-    const el = document.getElementById("detected-profile");
-    if (!el) return;
     const room = getChatRoomId();
     const name = GM_getValue("scannedCharName_" + room, "");
     const prof = GM_getValue("scannedCharProfile_" + room, "");
-    el.innerText = name ? `[${name}]\n${prof}` : "❌ 프로필 선택창을 한 번 열어주세요.";
+    document.getElementById("detected-profile").innerText = name
+      ? `[${name}]\n${prof}`
+      : "❌ 프로필 선택창을 한 번 열어주세요.";
   }
 
   document.getElementById("cfg-pc-note").addEventListener("input", (e) => {
-    GM_setValue("cfgPcNote_" + getChatRoomId(), e.target.value);
+    const room = getChatRoomId();
+    GM_setValue("cfgPcNote_" + room, e.target.value);
   });
   document.getElementById("cfg-custom-rule").addEventListener("input", (e) => {
-    GM_setValue("cfgCustomRule_" + getChatRoomId(), e.target.value);
+    const room = getChatRoomId();
+    GM_setValue("cfgCustomRule_" + room, e.target.value);
   });
 
   // =============================================
-  // 6. 설정 이벤트 & UI 토글
+  // 5. 설정 이벤트 & UI 토글
   // =============================================
   const egoSlider = document.getElementById("cfg-ego");
   const egoDesc = document.getElementById("ego-desc");
@@ -461,46 +446,72 @@
   ];
 
   const toggleProviderUI = () => {
-    const providerEl = document.getElementById("cfg-api-provider");
-    if (!providerEl) return;
-    if (providerEl.value === "firebase") {
+    const provider = document.getElementById("cfg-api-provider").value;
+    if (provider === "firebase") {
       document.getElementById("cfg-api-key").style.display = "none";
       document.getElementById("cfg-firebase-script").style.display = "block";
-      document.getElementById("cfg-key-label").innerText = "Firebase Config 복붙창:";
+      document.getElementById("cfg-key-label").innerText =
+        "Firebase Config 복붙창:";
     } else {
       document.getElementById("cfg-api-key").style.display = "block";
       document.getElementById("cfg-firebase-script").style.display = "none";
       document.getElementById("cfg-key-label").innerText = "GEMINI API KEY";
     }
   };
-  document.getElementById("cfg-api-provider").addEventListener("change", toggleProviderUI);
+  document
+    .getElementById("cfg-api-provider")
+    .addEventListener("change", toggleProviderUI);
 
   const loadCfg = () => {
-    if (!document.getElementById("cfg-api-provider")) return;
-    
     const room = getChatRoomId();
-    document.getElementById("cfg-api-provider").value = GM_getValue("apiProvider", "google");
+
+    document.getElementById("cfg-api-provider").value = GM_getValue(
+      "apiProvider",
+      "google",
+    );
     document.getElementById("cfg-api-key").value = GM_getValue("apiKey", "");
-    document.getElementById("cfg-firebase-script").value = GM_getValue("firebaseScript", "");
+    document.getElementById("cfg-firebase-script").value = GM_getValue(
+      "firebaseScript",
+      "",
+    );
     toggleProviderUI();
-    document.getElementById("cfg-model").value = GM_getValue("cfgModel", "gemini-3.1-pro-preview");
-    document.getElementById("cfg-style").value = GM_getValue("cfgStyle", "기본");
-    document.getElementById("cfg-pc-note").value = GM_getValue("cfgPcNote_" + room, "");
-    document.getElementById("cfg-custom-rule").value = GM_getValue("cfgCustomRule_" + room, "");
+
+    document.getElementById("cfg-model").value = GM_getValue(
+      "cfgModel",
+      "gemini-3.1-pro-preview",
+    );
+    document.getElementById("cfg-style").value = GM_getValue(
+      "cfgStyle",
+      "기본",
+    );
+
+    document.getElementById("cfg-pc-note").value = GM_getValue(
+      "cfgPcNote_" + room,
+      "",
+    );
+    document.getElementById("cfg-custom-rule").value = GM_getValue(
+      "cfgCustomRule_" + room,
+      "",
+    );
 
     const lenVal = GM_getValue("cfgLen", 3);
     document.getElementById("cfg-len").value = lenVal;
     document.getElementById("len-val").innerText = lenVal;
 
     const savedMode = GM_getValue("cfgMode", "expand");
-    const modeEl = document.querySelector(`input[name="cfg-mode"][value="${savedMode}"]`);
-    if(modeEl) modeEl.checked = true;
+    document.querySelector(
+      `input[name="cfg-mode"][value="${savedMode}"]`,
+    ).checked = true;
 
     const pov = GM_getValue("cfgPov", "1");
-    const povEl = document.querySelector(`input[name="cfg-pov"][value="${pov}"]`);
-    if(povEl) povEl.checked = true;
-    document.getElementById("cfg-pov-name").value = GM_getValue("cfgPovName", "");
-    document.getElementById("cfg-pov-name").style.display = pov === "3" ? "block" : "none";
+    document.querySelector(`input[name="cfg-pov"][value="${pov}"]`).checked =
+      true;
+    document.getElementById("cfg-pov-name").value = GM_getValue(
+      "cfgPovName",
+      "",
+    );
+    document.getElementById("cfg-pov-name").style.display =
+      pov === "3" ? "block" : "none";
 
     egoSlider.value = GM_getValue("cfgEgo", 1);
     egoDesc.innerText = egoTexts[egoSlider.value - 1];
@@ -511,8 +522,14 @@
     });
 
     for (let i = 1; i <= 10; i++) {
-      document.getElementById(`lore-active-${i}`).checked = GM_getValue(`loreActive${i}`, false);
-      document.getElementById(`lore-text-${i}`).value = GM_getValue(`loreText${i}`, "");
+      document.getElementById(`lore-active-${i}`).checked = GM_getValue(
+        `loreActive${i}`,
+        false,
+      );
+      document.getElementById(`lore-text-${i}`).value = GM_getValue(
+        `loreText${i}`,
+        "",
+      );
     }
 
     const mem = GM_getValue("cfgMemory", 8);
@@ -522,48 +539,66 @@
     updateContextDisplay();
   };
 
-  document.getElementById("cfg-save-btn").addEventListener("click", (e) => {
+  const saveCfg = () => {
     const room = getChatRoomId();
-    GM_setValue("apiProvider", document.getElementById("cfg-api-provider").value);
+
+    GM_setValue(
+      "apiProvider",
+      document.getElementById("cfg-api-provider").value,
+    );
     GM_setValue("apiKey", document.getElementById("cfg-api-key").value.trim());
-    GM_setValue("firebaseScript", document.getElementById("cfg-firebase-script").value.trim());
+    GM_setValue(
+      "firebaseScript",
+      document.getElementById("cfg-firebase-script").value.trim(),
+    );
     GM_setValue("cfgModel", document.getElementById("cfg-model").value);
     GM_setValue("cfgStyle", document.getElementById("cfg-style").value);
-    GM_setValue("cfgPcNote_" + room, document.getElementById("cfg-pc-note").value.trim());
-    GM_setValue("cfgCustomRule_" + room, document.getElementById("cfg-custom-rule").value.trim());
+
+    GM_setValue(
+      "cfgPcNote_" + room,
+      document.getElementById("cfg-pc-note").value.trim(),
+    );
+    GM_setValue(
+      "cfgCustomRule_" + room,
+      document.getElementById("cfg-custom-rule").value.trim(),
+    );
     GM_setValue("cfgLen", document.getElementById("cfg-len").value);
 
-    const modeEl = document.querySelector('input[name="cfg-mode"]:checked');
-    if (modeEl) GM_setValue("cfgMode", modeEl.value);
+    const mode = document.querySelector('input[name="cfg-mode"]:checked').value;
+    GM_setValue("cfgMode", mode);
 
-    const povEl = document.querySelector('input[name="cfg-pov"]:checked');
-    if (povEl) GM_setValue("cfgPov", povEl.value);
-    
-    GM_setValue("cfgPovName", document.getElementById("cfg-pov-name").value.trim());
-    GM_setValue("cfgEgo", document.getElementById("cfg-ego").value);
+    const pov = document.querySelector('input[name="cfg-pov"]:checked').value;
+    GM_setValue("cfgPov", pov);
+    GM_setValue(
+      "cfgPovName",
+      document.getElementById("cfg-pov-name").value.trim(),
+    );
 
-    const activeTones = Array.from(document.querySelectorAll(".tone-chip.active")).map((c) => c.dataset.val);
+    GM_setValue("cfgEgo", egoSlider.value);
+
+    const activeTones = Array.from(
+      document.querySelectorAll(".tone-chip.active"),
+    ).map((c) => c.dataset.val);
     GM_setValue("cfgTones", JSON.stringify(activeTones));
 
     for (let i = 1; i <= 10; i++) {
-      GM_setValue(`loreActive${i}`, document.getElementById(`lore-active-${i}`).checked);
-      GM_setValue(`loreText${i}`, document.getElementById(`lore-text-${i}`).value.trim());
+      GM_setValue(
+        `loreActive${i}`,
+        document.getElementById(`lore-active-${i}`).checked,
+      );
+      GM_setValue(
+        `loreText${i}`,
+        document.getElementById(`lore-text-${i}`).value.trim(),
+      );
     }
+
     GM_setValue("cfgMemory", document.getElementById("cfg-memory").value);
+    alert("글로벌 설정이 저장되었습니다!");
+  };
 
-    // 🌟 모바일 호환을 위해 alert 제거 및 부드러운 상태 변화 적용
-    const saveBtn = e.target;
-    const originalText = saveBtn.innerText;
-    saveBtn.innerText = "✅ 설정이 저장되었습니다!";
-    saveBtn.style.backgroundColor = "#28a745"; 
-    
-    setTimeout(() => {
-        saveBtn.innerText = originalText;
-        saveBtn.style.backgroundColor = ""; 
-    }, 1500);
-  });
-
-  document.getElementById("close-panel").onclick = () => (panel.style.display = "none");
+  document.getElementById("close-panel").onclick = () =>
+    (panel.style.display = "none");
+  document.getElementById("cfg-save-btn").onclick = saveCfg;
 
   document.querySelectorAll(".tone-chip").forEach((chip) => {
     chip.onclick = () => chip.classList.toggle("active");
@@ -571,37 +606,68 @@
 
   document.getElementsByName("cfg-pov").forEach((r) => {
     r.addEventListener("change", () => {
-      document.getElementById("cfg-pov-name").style.display = r.value === "3" ? "block" : "none";
+      document.getElementById("cfg-pov-name").style.display =
+        r.value === "3" ? "block" : "none";
     });
   });
 
-  document.getElementById("cfg-memory").addEventListener("input", (e) => { document.getElementById("mem-val").innerText = e.target.value; });
-  document.getElementById("cfg-len").addEventListener("input", (e) => { document.getElementById("len-val").innerText = e.target.value; });
-  egoSlider.addEventListener("input", () => { egoDesc.innerText = egoTexts[egoSlider.value - 1]; });
+  document.getElementById("cfg-memory").addEventListener("input", (e) => {
+    document.getElementById("mem-val").innerText = e.target.value;
+  });
+  document.getElementById("cfg-len").addEventListener("input", (e) => {
+    document.getElementById("len-val").innerText = e.target.value;
+  });
+  egoSlider.addEventListener("input", () => {
+    egoDesc.innerText = egoTexts[egoSlider.value - 1];
+  });
 
   document.querySelectorAll(".acc-header").forEach((header) => {
     header.addEventListener("click", () => {
-      const target = document.getElementById(header.getAttribute("data-target"));
+      const target = document.getElementById(
+        header.getAttribute("data-target"),
+      );
       const isOpen = target.classList.contains("open");
       target.classList.toggle("open");
-      header.innerHTML = header.innerHTML.replace(isOpen ? "▲" : "▼", isOpen ? "▼" : "▲");
+      header.innerHTML = header.innerHTML.replace(
+        isOpen ? "▲" : "▼",
+        isOpen ? "▼" : "▲",
+      );
     });
   });
 
   // =============================================
-  // 7. Gemini API / Firebase 통신 
+  // 6. Gemini API / Firebase 통신
   // =============================================
   async function fetchChatHistory() {
-    const path = location.pathname.match(/\/stories\/([^/]+)\/episodes\/([^/]+)/);
+    const path = location.pathname.match(
+      /\/stories\/([^/]+)\/episodes\/([^/]+)/,
+    );
     if (!path) return "(맥락 없음)";
     try {
-      const token = document.cookie.split(";").map((c) => c.trim()).find((c) => c.startsWith("access_token="))?.slice(13);
+      const token = document.cookie
+        .split(";")
+        .map((c) => c.trim())
+        .find((c) => c.startsWith("access_token="))
+        ?.slice(13);
       const limit = GM_getValue("cfgMemory", 8);
-      const res = await fetch(`${API_BASE}/v3/chats/${path[2]}/messages?limit=${limit}`, { headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } });
+      const res = await fetch(
+        `${API_BASE}/v3/chats/${path[2]}/messages?limit=${limit}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        },
+      );
       const json = await res.json();
       const msgs = (json.data ?? json).messages ?? [];
-      return msgs.reverse().map((m) => `[${m.role === "assistant" ? "상대" : "나"}]: ${m.content}`).join("\n\n");
-    } catch (e) { return "(맥락 로드 실패)"; }
+      return msgs
+        .reverse()
+        .map((m) => `[${m.role === "assistant" ? "상대" : "나"}]: ${m.content}`)
+        .join("\n\n");
+    } catch (e) {
+      return "(맥락 로드 실패)";
+    }
   }
 
   function callGemini(baseText) {
@@ -626,76 +692,138 @@
 
       const activeLores = [];
       for (let i = 1; i <= 10; i++) {
-        if (GM_getValue(`loreActive${i}`, false) && GM_getValue(`loreText${i}`, "")) activeLores.push(GM_getValue(`loreText${i}`, ""));
+        if (
+          GM_getValue(`loreActive${i}`, false) &&
+          GM_getValue(`loreText${i}`, "")
+        ) {
+          activeLores.push(GM_getValue(`loreText${i}`, ""));
+        }
       }
 
-      let povInstruct = pov === "1" ? "1인칭('나') 시점으로 서술" : `${povName || name || "캐릭터"} 중심의 3인칭 시점으로 서술`;
+      let povInstruct =
+        pov === "1"
+          ? "1인칭('나') 시점으로 서술"
+          : `${povName || name || "캐릭터"} 중심의 3인칭 시점으로 서술`;
+
       let lenInstruction = `전체 길이를 반드시 ${len}문단 내외로 배분하여 작성하십시오.`;
-      if (len == 1) lenInstruction = "전체 길이를 반드시 1문단 이내로 제한하여 아주 짧고 속도감 있게 작성하십시오.";
-      else if (len == 5) lenInstruction = "전체 길이를 최소 5~6문단 이상으로 아주 길고 볼륨감 있게 꽉꽉 채워서 작성하십시오. 분량을 아끼지 마십시오.";
+      if (len == 1)
+        lenInstruction =
+          "전체 길이를 반드시 1문단 이내로 제한하여 아주 짧고 속도감 있게 작성하십시오.";
+      else if (len == 5)
+        lenInstruction =
+          "전체 길이를 최소 5~6문단 이상으로 아주 길고 볼륨감 있게 꽉꽉 채워서 작성하십시오. 분량을 아끼지 마십시오.";
 
       let sysPrompt = `당신은 초월적인 롤플레잉 작가입니다.\n1. 시점: ${povInstruct}.\n2. 감지된 상대 정보: 이름 [${name}], 설정 [${prof}].\n`;
       if (pcNote) sysPrompt += `3. PC(플레이어) 추가 설정: ${pcNote}\n`;
-      if (customRule) sysPrompt += `4. 커스텀 규칙: ${customRule} (이 규칙을 최우선으로 반영하세요!)\n`;
-      if (activeLores.length > 0) sysPrompt += `5. 절대 세계관: \n${activeLores.join("\n")}\n`;
+      if (customRule)
+        sysPrompt += `4. 커스텀 규칙: ${customRule} (이 규칙을 최우선으로 반영하세요!)\n`;
+      if (activeLores.length > 0)
+        sysPrompt += `5. 절대 세계관: \n${activeLores.join("\n")}\n`;
+
       sysPrompt += `6. 타 캐릭터 조종 방지: 상대방(NPC)의 대사를 임의로 지어내거나 깊은 내면을 서술하지 마십시오. 상대방의 행동은 사용자의 시야에 보이는 객관적이고 짧은 리액션 정도로 제한하십시오.\n`;
 
-      if (mode === "polish") sysPrompt += `7. 작업 모드 (다듬기): 대충 적힌 뼈대 문장의 의도를 정확히 파악하여, 문맥을 매끄럽게 연결하고 선택한 문체에 맞춰 어휘를 고급스럽게 윤문하십시오.\n`;
-      else sysPrompt += `7. 작업 모드 (부풀리기): 전문 웹소설 작가의 화려하고 몰입감 있는 문체로 상황을 풍성하게 묘사하십시오. 피부로 느끼는 공기의 온도, 시선의 떨림 등 오감 묘사와 겉으로 드러나는 행동 이면에 깔린 감정선을 서술하여 씬의 밀도를 극대화하십시오.\n`;
-      
+      if (mode === "polish") {
+        sysPrompt += `7. 작업 모드 (다듬기): 대충 적힌 뼈대 문장의 의도를 정확히 파악하여, 문맥을 매끄럽게 연결하고 선택한 문체에 맞춰 어휘를 고급스럽게 윤문하십시오.\n`;
+      } else {
+        sysPrompt += `7. 작업 모드 (부풀리기): 전문 웹소설 작가의 화려하고 몰입감 있는 문체로 상황을 풍성하게 묘사하십시오. 피부로 느끼는 공기의 온도, 시선의 떨림 등 오감 묘사와 겉으로 드러나는 행동 이면에 깔린 감정선을 서술하여 씬의 밀도를 극대화하십시오.\n`;
+      }
       sysPrompt += `8. 출력 분량 통제: ${lenInstruction}\n`;
 
       let egoInstruction = "9. 대사 개입 및 상황 전개 지시: \n";
       if (baseText) {
-        if (egoLevel == 1) egoInstruction += "- 1단계: 유저가 입력한 대사의 의미, 길이, 단어를 완벽하게 유지하며 오직 맞춤법과 띄어쓰기만 교정하십시오.\n";
-        else if (egoLevel == 2) egoInstruction += "- 2단계: 대사의 본래 의미를 훼손하지 않는 선에서, PC의 성격과 설정에 가장 자연스럽게 어울리는 특유의 말투(어투)로만 살짝 다듬으십시오.\n";
-        else if (egoLevel == 3) egoInstruction += "- 3단계: 말투를 동기화하는 것에 더해, 대사 사이사이에 감정이 묻어나는 말줄임표(...), 한숨, 미세한 떨림이나 자연스러운 추임새를 추가하여 생동감을 불어넣으십시오.\n";
-        else if (egoLevel == 4) egoInstruction += "- 4단계: 유저가 던진 뼈대 대사의 핵심 의도를 파악하고, 그에 맞는 감정을 깊게 실어 할 말을 더 풍성하고 설득력 있게 확장하십시오.\n";
-        else if (egoLevel == 5) egoInstruction += "- 5단계: 유저 대사의 뼈대 의도만 남기고 문장을 해체한 뒤, 현재 상황에서 PC가 보여줄 수 있는 가장 극적이고 몰입감 넘치는 소설 속 명대사로 100% 새롭게 지어내십시오.\n";
+        if (egoLevel == 1)
+          egoInstruction +=
+            "- 1단계: 유저가 입력한 대사의 의미, 길이, 단어를 완벽하게 유지하며 오직 맞춤법과 띄어쓰기만 교정하십시오.\n";
+        else if (egoLevel == 2)
+          egoInstruction +=
+            "- 2단계: 대사의 본래 의미를 훼손하지 않는 선에서, PC의 성격과 설정에 가장 자연스럽게 어울리는 특유의 말투(어투)로만 살짝 다듬으십시오.\n";
+        else if (egoLevel == 3)
+          egoInstruction +=
+            "- 3단계: 말투를 동기화하는 것에 더해, 대사 사이사이에 감정이 묻어나는 말줄임표(...), 한숨, 미세한 떨림이나 자연스러운 추임새를 추가하여 생동감을 불어넣으십시오.\n";
+        else if (egoLevel == 4)
+          egoInstruction +=
+            "- 4단계: 유저가 던진 뼈대 대사의 핵심 의도를 파악하고, 그에 맞는 감정을 깊게 실어 할 말을 더 풍성하고 설득력 있게 확장하십시오.\n";
+        else if (egoLevel == 5)
+          egoInstruction +=
+            "- 5단계: 유저 대사의 뼈대 의도만 남기고 문장을 해체한 뒤, 현재 상황에서 PC가 보여줄 수 있는 가장 극적이고 몰입감 넘치는 소설 속 명대사로 100% 새롭게 지어내십시오.\n";
       } else {
-        if (egoLevel == 1) egoInstruction += "- 1단계: 대사와 행동을 극도로 아끼고 조용히 관망하십시오. 절대 상대방(NPC)의 대사나 행동을 대신 작성하지 말고 턴을 넘기십시오.\n";
-        else if (egoLevel == 2) egoInstruction += "- 2단계: 상대방의 직전 턴에 자연스럽게 호응하십시오. 상황을 크게 바꾸지 않는 선에서 부드럽게 대화의 흐름(핑퐁)만 이어가십시오.\n";
-        else if (egoLevel == 3) egoInstruction += "- 3단계: 현재의 대화 맥락과 PC의 설정을 바탕으로, 상황을 유동적이고 매끄럽게 다음 단계로 진전시키십시오. 엉뚱한 주제를 꺼내지 말고 현재 상황 안에서 주도적으로 극을 이끌어가십시오.\n";
-        else if (egoLevel == 4) egoInstruction += "- 4단계: PC의 감정과 성격을 적극적으로 드러내어 현재 씬(Scene)의 분위기를 확실하게 리드하십시오. 상황이 정체되지 않도록 능동적이고 확신에 찬 행동으로 스토리를 전진시키십시오.\n";
-        else if (egoLevel == 5) egoInstruction += "- 5단계: 뜬금없는 사건을 터뜨리지 마십시오. 단, 현재 마주한 상황 안에서 PC가 보여줄 수 있는 가장 결단력 있고 압도적인 언행을 창작하여, 타협 없이 씬의 주도권을 100% 쥐고 상황을 강력하게 통제하십시오.\n";
+        if (egoLevel == 1)
+          egoInstruction +=
+            "- 1단계: 대사와 행동을 극도로 아끼고 조용히 관망하십시오. 절대 상대방(NPC)의 대사나 행동을 대신 작성하지 말고 턴을 넘기십시오.\n";
+        else if (egoLevel == 2)
+          egoInstruction +=
+            "- 2단계: 상대방의 직전 턴에 자연스럽게 호응하십시오. 상황을 크게 바꾸지 않는 선에서 부드럽게 대화의 흐름(핑퐁)만 이어가십시오.\n";
+        else if (egoLevel == 3)
+          egoInstruction +=
+            "- 3단계: 현재의 대화 맥락과 PC의 설정을 바탕으로, 상황을 유동적이고 매끄럽게 다음 단계로 진전시키십시오. 엉뚱한 주제를 꺼내지 말고 현재 상황 안에서 주도적으로 극을 이끌어가십시오.\n";
+        else if (egoLevel == 4)
+          egoInstruction +=
+            "- 4단계: PC의 감정과 성격을 적극적으로 드러내어 현재 씬(Scene)의 분위기를 확실하게 리드하십시오. 상황이 정체되지 않도록 능동적이고 확신에 찬 행동으로 스토리를 전진시키십시오.\n";
+        else if (egoLevel == 5)
+          egoInstruction +=
+            "- 5단계: 뜬금없는 사건을 터뜨리지 마십시오. 단, 현재 마주한 상황 안에서 PC가 보여줄 수 있는 가장 결단력 있고 압도적인 언행을 창작하여, 타협 없이 씬의 주도권을 100% 쥐고 상황을 강력하게 통제하십시오.\n";
       }
       sysPrompt += egoInstruction;
 
-      sysPrompt += "10. 유저 입력 양식 주의사항: 사용자는 입력 시 대사는 따옴표 없이 일반 텍스트로 적고, 행동이나 묘사, 속마음은 * * 기호로 감싸서 구분합니다. 이를 바탕으로 문맥을 정확히 파악하십시오.\n";
+      sysPrompt +=
+        "10. 유저 입력 양식 주의사항: 사용자는 입력 시 대사는 따옴표 없이 일반 텍스트로 적고, 행동이나 묘사, 속마음은 * * 기호로 감싸서 구분합니다. 이를 바탕으로 문맥을 정확히 파악하십시오.\n";
       sysPrompt += `11. 요구 분위기: [${tones}], 문체: [${style}].\n`;
       sysPrompt += `12. 최종 출력 양식: 행동은 * * 로, 대사는 " " 로 감싸고 둘 사이엔 줄바꿈을 넣으세요. 오직 롤플레잉 본문만 출력하세요.\n`;
+
       sysPrompt += `\n[🔥 초월 작가 절대 원칙 - 퀄리티 극대화]\n`;
       sysPrompt += `13. 오글거리는 요약/마무리 금지: 내레이터처럼 상황을 요약하거나 수사학적 질문("과연 어떻게 될까?")으로 턴을 끝내지 마십시오. 철저히 현재 진행형의 묘사, 대사, 행동으로만 씬(Scene)을 끝맺으십시오.\n`;
       sysPrompt += `14. 일차원적 감정 서술 금지 (Show, Don't Tell): '슬펐다, 화났다, 당황했다' 같은 1차원적 단어 사용을 엄격히 금지합니다. 시선의 방향, 호흡의 변화, 손끝의 미세한 떨림 등 간접적인 행동과 생생한 오감 묘사로 텐션을 연출하십시오.\n`;
       sysPrompt += `15. 대화의 핑퐁 최적화: 분량을 채우기 위해 불필요한 과거 회상이나 장황한 독백을 남발하지 마십시오. 상대방이 눈앞에 있다면, 상대의 미세한 반응을 살피고 즉각적으로 반응하는 실시간 상호작용에 집중하십시오.\n`;
 
       let userContent = "";
-      if (baseText) userContent = `[이전 맥락]\n${history}\n\n[입력된 뼈대 문장]\n${baseText}\n\n위 내용을 뼈대로 지시사항에 맞춰 집필해.`;
-      else userContent = `[이전 맥락]\n${history}\n\n[자동 이어쓰기 요청]\n사용자의 입력이 없습니다. 위 대화 맥락을 완벽히 읽고, 지시사항(특히 '대사 개입 및 상황 전개 지시' 단계)에 맞춰 당신이 직접 다음 턴(사용자 캐릭터의 반응)을 상상하여 100% 창작해 주십시오.`;
+      if (baseText) {
+        userContent = `[이전 맥락]\n${history}\n\n[입력된 뼈대 문장]\n${baseText}\n\n위 내용을 뼈대로 지시사항에 맞춰 집필해.`;
+      } else {
+        userContent = `[이전 맥락]\n${history}\n\n[자동 이어쓰기 요청]\n사용자의 입력이 없습니다. 위 대화 맥락을 완벽히 읽고, 지시사항(특히 '대사 개입 및 상황 전개 지시' 단계)에 맞춰 당신이 직접 다음 턴(사용자 캐릭터의 반응)을 상상하여 100% 창작해 주십시오.`;
+      }
 
       if (provider === "firebase") {
         const configRaw = GM_getValue("firebaseScript", "");
-        if (!configRaw) return reject(new Error("설정에서 Firebase 복사본을 먼저 입력해주세요!"));
+        if (!configRaw)
+          return reject(
+            new Error("설정에서 Firebase 복사본을 먼저 입력해주세요!"),
+          );
 
         let configObj;
         let fbVersion = "12.12.0";
 
         try {
-          const versionMatch = configRaw.match(/firebasejs\/([0-9.]+)\/firebase-app\.js/);
+          const versionMatch = configRaw.match(
+            /firebasejs\/([0-9.]+)\/firebase-app\.js/,
+          );
           if (versionMatch && versionMatch[1]) fbVersion = versionMatch[1];
-          const match = configRaw.match(/const\s+firebaseConfig\s*=\s*({[\s\S]*?});/);
-          if (match && match[1]) configObj = new Function("return " + match[1])();
-          else {
-            const fallbackMatch = configRaw.match(/({[\s\S]*?apiKey[\s\S]*?appId[\s\S]*?})/);
-            if (fallbackMatch && fallbackMatch[1]) configObj = new Function("return " + fallbackMatch[1])();
+
+          const match = configRaw.match(
+            /const\s+firebaseConfig\s*=\s*({[\s\S]*?});/,
+          );
+          if (match && match[1]) {
+            configObj = new Function("return " + match[1])();
+          } else {
+            const fallbackMatch = configRaw.match(
+              /({[\s\S]*?apiKey[\s\S]*?appId[\s\S]*?})/,
+            );
+            if (fallbackMatch && fallbackMatch[1])
+              configObj = new Function("return " + fallbackMatch[1])();
             else throw new Error("형식 오류");
           }
-        } catch (e) { return reject(new Error("Firebase 코드를 해독하지 못했습니다.")); }
+        } catch (e) {
+          return reject(
+            new Error(
+              "Firebase 코드를 해독하지 못했습니다. 파이어베이스 홈페이지에서 준 <script> 태그 포함된 코드를 그대로 넣어주세요.",
+            ),
+          );
+        }
 
         try {
           const appUrl = `https://www.gstatic.com/firebasejs/${fbVersion}/firebase-app.js`;
           const majorVersion = parseInt(fbVersion.split(".")[0]);
-          const aiUrl = majorVersion >= 12
+          const aiUrl =
+            majorVersion >= 12
               ? `https://www.gstatic.com/firebasejs/${fbVersion}/firebase-ai.js`
               : `https://www.gstatic.com/firebasejs/${fbVersion}/firebase-vertexai.js`;
 
@@ -703,49 +831,118 @@
           let ai, generativeModel;
 
           if (majorVersion >= 12) {
-            const { HarmBlockThreshold, HarmCategory, getAI, getGenerativeModel, VertexAIBackend } = await import(aiUrl);
+            const {
+              HarmBlockThreshold,
+              HarmCategory,
+              getAI,
+              getGenerativeModel,
+              VertexAIBackend,
+            } = await import(aiUrl);
             const apps = getApps();
             const app = apps.length === 0 ? initializeApp(configObj) : getApp();
             ai = getAI(app, { backend: new VertexAIBackend("global") });
+
             const safetySettings = [
-              { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.OFF },
-              { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.OFF },
-              { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.OFF },
-              { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.OFF },
+              {
+                category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                threshold: HarmBlockThreshold.OFF,
+              },
+              {
+                category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                threshold: HarmBlockThreshold.OFF,
+              },
+              {
+                category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+                threshold: HarmBlockThreshold.OFF,
+              },
+              {
+                category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                threshold: HarmBlockThreshold.OFF,
+              },
             ];
-            generativeModel = getGenerativeModel(ai, { model: model, safetySettings, systemInstruction: { parts: [{ text: sysPrompt }] }, generationConfig: { temperature: 0.8 }, });
+
+            generativeModel = getGenerativeModel(ai, {
+              model: model,
+              safetySettings,
+              systemInstruction: { parts: [{ text: sysPrompt }] },
+              generationConfig: { temperature: 0.8 },
+            });
           } else {
-            const { HarmBlockThreshold, HarmCategory, getVertexAI, getGenerativeModel } = await import(aiUrl);
+            const {
+              HarmBlockThreshold,
+              HarmCategory,
+              getVertexAI,
+              getGenerativeModel,
+            } = await import(aiUrl);
             const apps = getApps();
             const app = apps.length === 0 ? initializeApp(configObj) : getApp();
             ai = getVertexAI(app);
+
             const safetySettings = [
-              { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.OFF },
-              { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.OFF },
-              { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.OFF },
-              { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.OFF },
+              {
+                category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                threshold: HarmBlockThreshold.OFF,
+              },
+              {
+                category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                threshold: HarmBlockThreshold.OFF,
+              },
+              {
+                category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+                threshold: HarmBlockThreshold.OFF,
+              },
+              {
+                category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                threshold: HarmBlockThreshold.OFF,
+              },
             ];
-            generativeModel = getGenerativeModel(ai, { model: model, safetySettings, systemInstruction: { parts: [{ text: sysPrompt }] }, generationConfig: { temperature: 0.8 }, });
+
+            generativeModel = getGenerativeModel(ai, {
+              model: model,
+              safetySettings,
+              systemInstruction: { parts: [{ text: sysPrompt }] },
+              generationConfig: { temperature: 0.8 },
+            });
           }
 
           const result = await generativeModel.generateContent(userContent);
           let rawResult = result.response.text().trim();
-          resolve(rawResult.replace(/^```[^\n]*\n([\s\S]*?)\n```\s*$/m, "$1").trim());
-        } catch (e) { reject(new Error("Firebase Vertex 통신 실패: " + e.message)); }
+          rawResult = rawResult
+            .replace(/^```[^\n]*\n([\s\S]*?)\n```\s*$/m, "$1")
+            .trim();
+          resolve(rawResult);
+        } catch (e) {
+          reject(new Error("Firebase Vertex 통신 실패: " + e.message));
+        }
       } else {
+        // 기존 Google API (Gemini Direct)
         const key = GM_getValue("apiKey", "");
-        if (!key) return reject(new Error("설정에서 API 키를 먼저 입력해주세요!"));
+        if (!key)
+          return reject(new Error("설정에서 API 키를 먼저 입력해주세요!"));
+
         GM_xmlhttpRequest({
           method: "POST",
           url: `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
           headers: { "Content-Type": "application/json" },
-          data: JSON.stringify({ system_instruction: { parts: [{ text: sysPrompt }] }, contents: [{ parts: [{ text: userContent }] }], generationConfig: { temperature: 0.8 }, }),
+          data: JSON.stringify({
+            system_instruction: { parts: [{ text: sysPrompt }] },
+            contents: [{ parts: [{ text: userContent }] }],
+            generationConfig: { temperature: 0.8 },
+          }),
           onload: (res) => {
             try {
               const data = JSON.parse(res.responseText);
               if (data.error) reject(new Error(data.error.message));
-              else resolve(data.candidates[0].content.parts[0].text.trim().replace(/^```[^\n]*\n([\s\S]*?)\n```\s*$/m, "$1").trim());
-            } catch (e) { reject(new Error("응답 분석 실패")); }
+              else {
+                let raw = data.candidates[0].content.parts[0].text.trim();
+                raw = raw
+                  .replace(/^```[^\n]*\n([\s\S]*?)\n```\s*$/m, "$1")
+                  .trim();
+                resolve(raw);
+              }
+            } catch (e) {
+              reject(new Error("응답 분석 실패"));
+            }
           },
           onerror: () => reject(new Error("네트워크 오류")),
         });
@@ -754,98 +951,201 @@
   }
 
   // =============================================
-  // 8. UI 자동 주입 (방해되는 채팅창 내 중복 버튼 완전 삭제)
+  // 7. UI 자동 주입 (설정 버튼 원래 자리 복구 + 새 채팅창 호환)
   // =============================================
   let currentRoomId = "";
 
   function injectUI() {
-    const newRoomId = getChatRoomId();
-    if (currentRoomId !== newRoomId) {
-      currentRoomId = newRoomId;
-      loadCfg();
-    }
-
-    const sendBtnIcon = document.querySelector('path[d*="M18.77 11.13"]');
-    const sendBtn = sendBtnIcon ? sendBtnIcon.closest("button") : null;
-
-    if (sendBtn && !document.getElementById("crack-pure-magic-btn")) {
-      const group = document.createElement("div");
-      group.className = "crack-right-group";
-      sendBtn.parentNode.insertBefore(group, sendBtn);
-
-      const hWidget = document.createElement("div");
-      hWidget.id = "crack-history-widget";
-      hWidget.className = "crack-history-widget";
-      hWidget.innerHTML = `<span class="crack-history-btn" id="history-prev">◀</span><span id="history-text">1/1</span><span class="crack-history-btn" id="history-next">▶</span>`;
-      group.appendChild(hWidget);
-
-      const gBtn = document.createElement("button");
-      gBtn.id = "crack-pure-magic-btn";
-      gBtn.className = "crack-pure-magic";
-      gBtn.innerHTML = `<span id="magic-icon" style="font-size: 14px;">✨</span>`;
-
-      const updateChatInputFromHistory = () => {
-        const chatInput = document.querySelector('.__chat_input_textarea, div[contenteditable="true"], textarea');
-        if (!chatInput || generatedHistory.length === 0) return;
-        const textToInsert = generatedHistory[historyIndex];
-
-        if (chatInput.tagName === "TEXTAREA") {
-          const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
-          setter.call(chatInput, textToInsert);
-          chatInput.style.height = "auto";
-          chatInput.style.height = chatInput.scrollHeight + "px";
-        } else chatInput.innerHTML = `<p>${textToInsert}</p>`;
-        
-        chatInput.dispatchEvent(new Event("input", { bubbles: true }));
-        chatInput.focus();
-        document.getElementById("history-text").innerText = `${historyIndex + 1}/${generatedHistory.length}`;
-      };
-
-      hWidget.querySelector("#history-prev").onclick = (e) => { e.preventDefault(); if (historyIndex > 0) { historyIndex--; updateChatInputFromHistory(); } };
-      hWidget.querySelector("#history-next").onclick = (e) => { e.preventDefault(); if (historyIndex < generatedHistory.length - 1) { historyIndex++; updateChatInputFromHistory(); } };
-
-      gBtn.onclick = async (e) => {
-        e.preventDefault();
-        const chatInput = document.querySelector('.__chat_input_textarea, div[contenteditable="true"], textarea');
-        if (!chatInput) return alert("채팅 입력창을 찾을 수 없습니다.");
-
-        const baseText = chatInput.tagName === "TEXTAREA" ? chatInput.value.trim() : chatInput.innerText.trim();
-        const icon = document.getElementById("magic-icon");
-        icon.innerHTML = "⏳";
-        icon.classList.add("spin-anim");
-
-        try {
-          const result = await callGemini(baseText);
-          if (generatedHistory.length === 0) generatedHistory.push(baseText);
-          generatedHistory.push(result);
-          historyIndex = generatedHistory.length - 1;
-          updateContextDisplay();
-          updateChatInputFromHistory();
-          if (generatedHistory.length > 1) hWidget.style.display = "flex";
-        } catch (err) { alert(err.message); } 
-        finally { icon.innerHTML = "✨"; icon.classList.remove("spin-anim"); }
-      };
-
-      group.appendChild(gBtn);
-      group.appendChild(sendBtn);
-      sendBtn.addEventListener("click", () => { generatedHistory = []; historyIndex = -1; hWidget.style.display = "none"; });
-    }
-
-    const chatInput = document.querySelector('.__chat_input_textarea, div[contenteditable="true"], textarea');
-    if (chatInput && !chatInput.dataset.historyHooked) {
-      chatInput.dataset.historyHooked = "true";
-      chatInput.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" && !e.shiftKey) { generatedHistory = []; historyIndex = -1; const w = document.getElementById("crack-history-widget"); if (w) w.style.display = "none"; }
-      });
-    }
+  const newRoomId = getChatRoomId();
+  if (currentRoomId !== newRoomId) {
+    currentRoomId = newRoomId;
+    loadCfg();
   }
 
-  // 인터벌 실행 시 누락된 플로팅 UI만 조용히 다시 채워넣기 (먹통 원천 방지)
+  // 1. 설정 버튼(⚙️) 주입: 기존처럼 'model-icon' 옆에 유지
+  const modelBtn = Array.from(document.querySelectorAll("button")).find(
+    (btn) => {
+      return btn.querySelector('img[src*="model-icon"]');
+    },
+  );
+
+  if (modelBtn && !document.getElementById("crack-pure-settings-btn")) {
+    const sBtn = document.createElement("button");
+    sBtn.id = "crack-pure-settings-btn";
+    sBtn.className = "crack-pure-settings";
+    sBtn.innerHTML = `⚙️ <span class="setting-btn-text">AI 설정</span>`;
+    sBtn.onclick = (e) => {
+      e.preventDefault();
+      updateContextDisplay();
+      panel.style.display = panel.style.display === "block" ? "none" : "flex";
+    };
+    modelBtn.parentNode.insertBefore(sBtn, modelBtn);
+  }
+
+  // 2. 마법 버튼(✨)은 채팅창 내부가 아니라 화면 우측 하단 플로팅 바에 주입
+  const sendBtnIcon = document.querySelector('path[d*="M18.77 11.13"]');
+  const sendBtn = sendBtnIcon ? sendBtnIcon.closest("button") : null;
+
+  const chatInputForButton = document.querySelector(
+    '.__chat_input_textarea, div[contenteditable="true"], textarea',
+  );
+
+  if (chatInputForButton && !document.getElementById("crack-pure-magic-btn")) {
+    let group = document.getElementById("crack-ai-floating-toolbar");
+
+    if (!group) {
+      group = document.createElement("div");
+      group.id = "crack-ai-floating-toolbar";
+      group.className = "crack-right-group";
+      document.body.appendChild(group);
+    }
+
+    const hWidget = document.createElement("div");
+    hWidget.id = "crack-history-widget";
+    hWidget.className = "crack-history-widget";
+    hWidget.innerHTML = `
+      <span class="crack-history-btn" id="history-prev">◀</span>
+      <span id="history-text">1/1</span>
+      <span class="crack-history-btn" id="history-next">▶</span>
+    `;
+    group.appendChild(hWidget);
+
+    const gBtn = document.createElement("button");
+    gBtn.id = "crack-pure-magic-btn";
+    gBtn.className = "crack-pure-magic";
+    gBtn.title = "AI 문장 보정";
+    gBtn.innerHTML = `<span id="magic-icon" style="font-size: 14px;">✨</span>`;
+
+    const updateChatInputFromHistory = () => {
+      const chatInput = document.querySelector(
+        '.__chat_input_textarea, div[contenteditable="true"], textarea',
+      );
+      if (!chatInput || generatedHistory.length === 0) return;
+
+      const textToInsert = generatedHistory[historyIndex];
+
+      if (chatInput.tagName === "TEXTAREA") {
+        const setter = Object.getOwnPropertyDescriptor(
+          window.HTMLTextAreaElement.prototype,
+          "value",
+        ).set;
+
+        setter.call(chatInput, textToInsert);
+        chatInput.style.height = "auto";
+        chatInput.style.height = chatInput.scrollHeight + "px";
+      } else {
+        chatInput.innerHTML = `<p>${textToInsert}</p>`;
+      }
+
+      chatInput.dispatchEvent(new Event("input", { bubbles: true }));
+      chatInput.focus();
+
+      const historyText = document.getElementById("history-text");
+      if (historyText) {
+        historyText.innerText =
+          `${historyIndex + 1}/${generatedHistory.length}`;
+      }
+    };
+
+    hWidget.querySelector("#history-prev").onclick = (e) => {
+      e.preventDefault();
+
+      if (historyIndex > 0) {
+        historyIndex--;
+        updateChatInputFromHistory();
+      }
+    };
+
+    hWidget.querySelector("#history-next").onclick = (e) => {
+      e.preventDefault();
+
+      if (historyIndex < generatedHistory.length - 1) {
+        historyIndex++;
+        updateChatInputFromHistory();
+      }
+    };
+
+    gBtn.onclick = async (e) => {
+      e.preventDefault();
+
+      const chatInput = document.querySelector(
+        '.__chat_input_textarea, div[contenteditable="true"], textarea',
+      );
+
+      if (!chatInput) {
+        return alert("채팅 입력창을 찾을 수 없습니다.");
+      }
+
+      const baseText =
+        chatInput.tagName === "TEXTAREA"
+          ? chatInput.value.trim()
+          : chatInput.innerText.trim();
+
+      const icon = document.getElementById("magic-icon");
+      icon.innerHTML = "⏳";
+      icon.classList.add("spin-anim");
+
+      try {
+        const result = await callGemini(baseText);
+
+        if (generatedHistory.length === 0) {
+          generatedHistory.push(baseText);
+        }
+
+        generatedHistory.push(result);
+        historyIndex = generatedHistory.length - 1;
+
+        updateChatInputFromHistory();
+
+        if (generatedHistory.length > 1) {
+          hWidget.style.display = "flex";
+        }
+      } catch (err) {
+        alert(err.message);
+      } finally {
+        icon.innerHTML = "✨";
+        icon.classList.remove("spin-anim");
+      }
+    };
+
+    group.appendChild(gBtn);
+  }
+
+  // 3. 전송 버튼은 원래 자리 그대로 두고, 전송 시 히스토리만 초기화
+  if (sendBtn && !sendBtn.dataset.historyResetHooked) {
+    sendBtn.dataset.historyResetHooked = "true";
+
+    sendBtn.addEventListener("click", () => {
+      generatedHistory = [];
+      historyIndex = -1;
+
+      const w = document.getElementById("crack-history-widget");
+      if (w) w.style.display = "none";
+    });
+  }
+
+  // 4. 엔터키 전송 감지도 유지
+  const chatInput = document.querySelector(
+    '.__chat_input_textarea, div[contenteditable="true"], textarea',
+  );
+
+  if (chatInput && !chatInput.dataset.historyHooked) {
+    chatInput.dataset.historyHooked = "true";
+
+    chatInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        generatedHistory = [];
+        historyIndex = -1;
+
+        const w = document.getElementById("crack-history-widget");
+        if (w) w.style.display = "none";
+      }
+    });
+  }
+}
+
   setInterval(() => {
     backgroundScanner();
-    if (!document.body.contains(fBtn)) document.body.appendChild(fBtn);
-    if (!document.body.contains(panel)) document.body.appendChild(panel);
     injectUI();
   }, 1000);
-
 })();
