@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         크랙 AI 답변 커스텀(제미나이API & Firebase 통합) - 모바일 최적화 완벽 패치
+// @name         크랙 AI 답변 커스텀(제미나이API & Firebase 통합) - 완벽 플로팅 패치
 // @namespace    http://tampermonkey.net/
-// @version      3.3.4
-// @description  저장 시 튕김 오류 해결, 플로팅 버튼 무한 유지 및 모바일 터치 드래그 지원
+// @version      3.4.0
+// @description  Wrtn UI 충돌 원천 차단, 모든 기능을 독립적인 플로팅 위젯으로 분리
 // @match        https://crack.wrtn.ai/*
 // @grant        GM_addStyle
 // @grant        GM_setValue
@@ -21,48 +21,41 @@
   let historyIndex = -1;
 
   function getChatRoomId() {
-    const match = location.pathname.match(
-      /\/stories\/[^/]+\/episodes\/([^/]+)/,
-    );
+    const match = location.pathname.match(/\/stories\/[^/]+\/episodes\/([^/]+)/);
     return match ? match[1] : "global_room";
   }
 
   // =============================================
-  // 1. 스타일 (플로팅 버튼 UI 추가)
+  // 1. 스타일 (독립형 플로팅 위젯 UI 추가)
   // =============================================
   GM_addStyle(`
-        /* 🌟 플로팅 설정 버튼 */
-        #crack-floating-btn {
+        /* 🌟 밖으로 빼낸 통합 플로팅 위젯 */
+        #crack-floating-widget {
             position: fixed; top: 120px; right: 20px; z-index: 999998;
-            background-color: var(--surface_brand_primary, #ff4a4a); color: white;
-            padding: 10px 16px; border-radius: 50px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            font-size: 13px; font-weight: bold; font-family: var(--font-sans);
+            background-color: var(--bg_elevated_primary, #ffffff);
+            border: 1px solid var(--border, #d1d5db);
+            padding: 8px 12px; border-radius: 50px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.15);
             display: flex; align-items: center; gap: 8px;
-            cursor: grab; user-select: none; transition: background-color 0.2s, transform 0.2s;
-            touch-action: none;
+            cursor: grab; user-select: none; touch-action: none;
         }
-        #crack-floating-btn:hover { filter: brightness(0.9); transform: scale(1.05); }
-        #crack-floating-btn:active { cursor: grabbing; transform: scale(0.95); }
+        #crack-floating-widget:active { cursor: grabbing; }
 
-        /* 채팅창 내 매직 버튼 및 위젯 */
-        .crack-right-group { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
-        .crack-pure-magic {
-            height: 1.75rem; width: 1.75rem; min-width: 1.75rem; border-radius: 9999px;
-            background-color: var(--surface_brand_primary, #ff4a4a); color: white; display: inline-flex; align-items: center; justify-content: center;
-            cursor: pointer; border: none; padding: 0; box-shadow: 0 4px 6px var(--shadow-md); transition: all 0.2s;
+        .crack-fbtn {
+            border: none; padding: 8px 14px; border-radius: 20px;
+            font-size: 13px; font-weight: 800; font-family: var(--font-sans, sans-serif);
+            cursor: pointer; transition: 0.2s; display: inline-flex; align-items: center; justify-content: center;
         }
-        .crack-pure-magic:hover { transform: scale(1.1); filter: brightness(0.9); }
+        #f-magic-btn { background-color: #6A3DE8; color: white; box-shadow: 0 2px 6px rgba(106, 61, 232, 0.4); }
+        #f-magic-btn:hover { background-color: #5228CC; transform: scale(1.05); }
+        #f-settings-btn { background-color: #ff4a4a; color: white; box-shadow: 0 2px 6px rgba(255, 74, 74, 0.4); }
+        #f-settings-btn:hover { background-color: #e03c2a; transform: scale(1.05); }
 
-        .crack-history-widget {
-            display: none; align-items: center; gap: 8px;
-            background: var(--bg_elevated_primary); border: 1px solid var(--border);
-            border-radius: 12px; padding: 4px 10px; font-size: 13px; font-weight: bold; color: var(--text_primary);
-        }
-        .crack-history-btn { cursor: pointer; color: var(--text_secondary); transition: 0.2s; user-select: none; }
-        .crack-history-btn:hover { color: var(--text_brand); transform: scale(1.1); }
+        .crack-hist-btn { cursor: pointer; color: #6b7280; font-size: 15px; font-weight: bold; padding: 0 4px; transition: 0.2s; }
+        .crack-hist-btn:hover { color: #6A3DE8; transform: scale(1.2); }
+        .crack-hist-text { font-size: 12px; font-weight: 800; color: #374151; min-width: 24px; text-align: center; }
 
-        /* AI 패널 설정 */
+        /* AI 패널 설정 (기존과 동일) */
         #crack-ai-panel {
             position: fixed; top: 80px; right: 30px; z-index: 999999;
             width: min(560px, 90vw); max-height: 85vh;
@@ -70,7 +63,6 @@
             box-shadow: 0 10px 30px rgba(0,0,0,0.5); color: var(--text_primary); font-family: var(--font-sans);
             display: none; flex-direction: column; overflow: hidden;
         }
-
         .panel-header {
             padding: 16px 20px; background-color: var(--bg_elevated_primary);
             border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;
@@ -79,18 +71,14 @@
         .panel-title { font-size: 16px; font-weight: 800; color: var(--text_brand); display: flex; align-items: center; gap: 6px; }
         .panel-close { cursor: pointer; font-size: 18px; color: var(--text_secondary); transition: 0.2s; padding: 0 5px; }
         .panel-close:hover { color: #ff4444; transform: scale(1.1); }
-
         .panel-content { padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 24px; }
         .panel-content::-webkit-scrollbar { width: 6px; }
         .panel-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
-
         .setting-group { display: flex; flex-direction: column; gap: 8px; }
         .setting-label { font-size: 12px; color: var(--text_secondary); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;}
-
         .info-box { background: var(--bg_elevated_primary); border: 1px solid var(--border); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
         .info-title { font-size: 12px; color: var(--text_action_blue_primary); font-weight: 800; display: flex; align-items: center; gap: 4px; }
         .info-text { font-size: 13px; color: var(--text_primary); line-height: 1.5; word-break: break-all; white-space: pre-wrap; }
-
         .expand-input {
             width: 100%; box-sizing: border-box; padding: 12px;
             background-color: var(--bg_elevated_secondary); color: var(--text_primary);
@@ -98,10 +86,8 @@
         }
         .expand-input:focus { border-color: var(--text_brand); }
         textarea.expand-input { resize: vertical; line-height: 1.5; }
-
         .radio-group { display: flex; gap: 16px; align-items: center; font-size: 14px; }
         .radio-group label { cursor: pointer; display: flex; align-items: center; gap: 6px; }
-
         .tone-container { display: flex; flex-wrap: wrap; gap: 8px; }
         .tone-chip {
             padding: 6px 14px; border: 1px solid var(--border); border-radius: 20px;
@@ -109,7 +95,6 @@
         }
         .tone-chip:hover { border-color: var(--text_secondary); }
         .tone-chip.active { background-color: var(--surface_brand_primary, #ff4a4a); color: white; border-color: transparent; font-weight: bold; }
-
         .acc-wrapper { display: flex; flex-direction: column; gap: 0; }
         .acc-header {
             font-size: 14px; font-weight: 800; color: var(--text_primary); background: var(--bg_elevated_primary);
@@ -123,7 +108,6 @@
             flex-direction: column; gap: 16px;
         }
         .acc-content.open { display: flex; }
-
         .slots-container { display: flex; flex-direction: column; gap: 8px; }
         .lore-details { border-bottom: 1px solid var(--border); padding-bottom: 12px; }
         .lore-details:last-child { border-bottom: none; padding-bottom: 0; }
@@ -132,13 +116,10 @@
         .lore-summary::before { content: '▶'; font-size: 10px; color: var(--text_secondary); transition: 0.2s; }
         .lore-details[open] .lore-summary::before { transform: rotate(90deg); }
         .lore-summary label { cursor: pointer; display: flex; align-items: center; gap: 6px; margin: 0; }
-
         .ego-slider-box { display: flex; flex-direction: column; gap: 6px; padding: 10px; background: var(--bg_elevated_primary); border: 1px solid var(--border); border-radius: 8px; }
         .ego-desc { font-size: 11px; text-align: center; color: var(--text_brand); font-weight: bold; }
-
         .btn-save { width: 100%; background: var(--surface_brand_primary, #ff4a4a); color: white; border: none; padding: 14px; border-radius: 10px; cursor: pointer; font-weight: 800; font-size: 15px; transition: 0.2s; letter-spacing: 1px; }
         .btn-save:hover { opacity: 0.9; transform: translateY(-2px); }
-
         @keyframes crack-spin { 100% { transform: rotate(360deg); } }
         .spin-anim { display: inline-block; animation: crack-spin 1s linear infinite; }
     `);
@@ -162,7 +143,7 @@
   panel.id = "crack-ai-panel";
   panel.innerHTML = `
         <div class="panel-header" id="panel-drag-handle">
-            <div class="panel-title">✨ AI 설정 (V3.3.4)</div>
+            <div class="panel-title">✨ AI 설정 (V3.4.0)</div>
             <div class="panel-close" id="close-panel">✕</div>
         </div>
         <div class="panel-content">
@@ -283,16 +264,13 @@
             <button id="cfg-save-btn" class="btn-save">글로벌 설정 저장</button>
         </div>
     `;
-  // 문서에 패널이 제대로 삽입되는지 체크하는 함수
-  function ensurePanelInDOM() {
-      if (!document.body.contains(panel)) {
-          document.body.appendChild(panel);
-      }
+
+  function ensureElementsInDOM() {
+      if (!document.body.contains(panel)) document.body.appendChild(panel);
   }
-  ensurePanelInDOM();
 
   // =============================================
-  // 3. 메인 설정 패널 드래그 (마우스 & 터치 동시 지원)
+  // 3. 메인 설정 패널 드래그 관리
   // =============================================
   const dragHandle = document.getElementById("panel-drag-handle");
   let isDragging = false, startX, startY, initLeft, initTop;
@@ -310,28 +288,21 @@
     startX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
     startY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
     const rect = panel.getBoundingClientRect();
-    initLeft = rect.left;
-    initTop = rect.top;
+    initLeft = rect.left; initTop = rect.top;
   };
-
   const onPanelDrag = (e) => {
     if (!isDragging) return;
     e.preventDefault();
     const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
     const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
-    
     let newLeft = Math.max(0, Math.min(initLeft + (clientX - startX), window.innerWidth - panel.offsetWidth));
     let newTop = Math.max(0, Math.min(initTop + (clientY - startY), window.innerHeight - panel.offsetHeight));
-    panel.style.left = newLeft + "px";
-    panel.style.top = newTop + "px";
-    panel.style.right = "auto";
+    panel.style.left = newLeft + "px"; panel.style.top = newTop + "px"; panel.style.right = "auto";
   };
-
   const stopPanelDrag = () => {
     if (isDragging) {
       isDragging = false;
-      GM_setValue("panelLeft", parseInt(panel.style.left));
-      GM_setValue("panelTop", parseInt(panel.style.top));
+      GM_setValue("panelLeft", parseInt(panel.style.left)); GM_setValue("panelTop", parseInt(panel.style.top));
     }
   };
 
@@ -343,52 +314,52 @@
   document.addEventListener("touchend", stopPanelDrag);
 
   // =============================================
-  // 4. 새로운 플로팅 버튼 생성 및 드래그 (부활 기능 포함)
+  // 4. ✨통합 플로팅 위젯 생성 (Wrtn UI 충돌 원천 방지)
   // =============================================
-  function initFloatingButton() {
-      if (document.getElementById("crack-floating-btn")) return;
+  function initFloatingWidget() {
+      if (document.getElementById("crack-floating-widget")) return;
 
-      const fBtn = document.createElement("div");
-      fBtn.id = "crack-floating-btn";
-      fBtn.innerHTML = `⚙️ <span>AI 설정</span>`;
-      document.body.appendChild(fBtn);
+      const widget = document.createElement("div");
+      widget.id = "crack-floating-widget";
+      widget.innerHTML = `
+          <span id="f-hist-prev" class="crack-hist-btn" style="display:none;">◀</span>
+          <span id="f-hist-text" class="crack-hist-text" style="display:none;">1/1</span>
+          <span id="f-hist-next" class="crack-hist-btn" style="display:none;">▶</span>
+          <button id="f-magic-btn" class="crack-fbtn"><span id="magic-icon" style="margin-right:4px;">✨</span> 자동 집필</button>
+          <button id="f-settings-btn" class="crack-fbtn">⚙️ 설정</button>
+      `;
+      document.body.appendChild(widget);
 
-      let sLeft = GM_getValue("fBtnLeft", null);
-      let sTop = GM_getValue("fBtnTop", null);
+      let sLeft = GM_getValue("fwLeft", null);
+      let sTop = GM_getValue("fwTop", null);
       if (sLeft !== null && sTop !== null && !isNaN(sLeft) && !isNaN(sTop)) {
-          fBtn.style.left = sLeft + "px";
-          fBtn.style.top = sTop + "px";
-          fBtn.style.bottom = "auto";
-          fBtn.style.right = "auto";
+          widget.style.left = sLeft + "px"; widget.style.top = sTop + "px";
+          widget.style.bottom = "auto"; widget.style.right = "auto";
       }
 
       let isFDragging = false, hasDragged = false;
       let fStartX, fStartY, fInitLeft, fInitTop;
 
       const startFDrag = (e) => {
-          isFDragging = true;
-          hasDragged = false;
+          isFDragging = true; hasDragged = false;
           fStartX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
           fStartY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
-          const rect = fBtn.getBoundingClientRect();
-          fInitLeft = rect.left;
-          fInitTop = rect.top;
+          const rect = widget.getBoundingClientRect();
+          fInitLeft = rect.left; fInitTop = rect.top;
       };
 
       const onFDrag = (e) => {
           if (!isFDragging) return;
           const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
           const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
-          
           if (Math.abs(clientX - fStartX) > 5 || Math.abs(clientY - fStartY) > 5) hasDragged = true;
+          
           if (hasDragged) {
               e.preventDefault();
-              let newLeft = Math.max(0, Math.min(fInitLeft + (clientX - fStartX), window.innerWidth - fBtn.offsetWidth));
-              let newTop = Math.max(0, Math.min(fInitTop + (clientY - fStartY), window.innerHeight - fBtn.offsetHeight));
-              fBtn.style.left = newLeft + "px";
-              fBtn.style.top = newTop + "px";
-              fBtn.style.bottom = "auto";
-              fBtn.style.right = "auto";
+              let newLeft = Math.max(0, Math.min(fInitLeft + (clientX - fStartX), window.innerWidth - widget.offsetWidth));
+              let newTop = Math.max(0, Math.min(fInitTop + (clientY - fStartY), window.innerHeight - widget.offsetHeight));
+              widget.style.left = newLeft + "px"; widget.style.top = newTop + "px";
+              widget.style.bottom = "auto"; widget.style.right = "auto";
           }
       };
 
@@ -396,27 +367,103 @@
           if (isFDragging) {
               isFDragging = false;
               if (hasDragged) {
-                  GM_setValue("fBtnLeft", parseInt(fBtn.style.left));
-                  GM_setValue("fBtnTop", parseInt(fBtn.style.top));
+                  GM_setValue("fwLeft", parseInt(widget.style.left)); GM_setValue("fwTop", parseInt(widget.style.top));
               }
           }
       };
 
-      fBtn.addEventListener("mousedown", startFDrag);
+      widget.addEventListener("mousedown", startFDrag);
       document.addEventListener("mousemove", onFDrag, { passive: false });
       document.addEventListener("mouseup", stopFDrag);
-      fBtn.addEventListener("touchstart", startFDrag, { passive: true });
+      widget.addEventListener("touchstart", startFDrag, { passive: true });
       document.addEventListener("touchmove", onFDrag, { passive: false });
       document.addEventListener("touchend", stopFDrag);
 
-      fBtn.addEventListener("click", (e) => {
-          if (!hasDragged) {
-              ensurePanelInDOM();
-              updateContextDisplay();
-              panel.style.display = (panel.style.display === "flex" || panel.style.display === "block") ? "none" : "flex";
+      // 설정 패널 열기
+      document.getElementById("f-settings-btn").addEventListener("click", (e) => {
+          if (hasDragged) { e.preventDefault(); return; }
+          ensureElementsInDOM();
+          updateContextDisplay();
+          panel.style.display = (panel.style.display === "flex" || panel.style.display === "block") ? "none" : "flex";
+      });
+
+      // 히스토리 업데이트 UI 함수
+      const updateChatInputFromHistory = () => {
+          const chatInput = document.querySelector('.__chat_input_textarea, div[contenteditable="true"], textarea');
+          if (!chatInput || generatedHistory.length === 0) return;
+          const textToInsert = generatedHistory[historyIndex];
+
+          if (chatInput.tagName === "TEXTAREA") {
+              const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
+              setter.call(chatInput, textToInsert);
+              chatInput.style.height = "auto";
+              chatInput.style.height = chatInput.scrollHeight + "px";
+          } else {
+              chatInput.innerHTML = `<p>${textToInsert}</p>`;
+          }
+          chatInput.dispatchEvent(new Event("input", { bubbles: true }));
+          chatInput.focus();
+          document.getElementById("f-hist-text").innerText = `${historyIndex + 1}/${generatedHistory.length}`;
+      };
+
+      // 마법 버튼(자동 집필) 로직
+      document.getElementById("f-magic-btn").addEventListener("click", async (e) => {
+          if (hasDragged) { e.preventDefault(); return; }
+          ensureElementsInDOM();
+          
+          const chatInput = document.querySelector('.__chat_input_textarea, div[contenteditable="true"], textarea');
+          if (!chatInput) return alert("입력창을 찾을 수 없습니다.");
+
+          const baseText = chatInput.tagName === "TEXTAREA" ? chatInput.value.trim() : chatInput.innerText.trim();
+          const icon = document.getElementById("magic-icon");
+          icon.innerHTML = "⏳"; icon.classList.add("spin-anim");
+
+          try {
+              const result = await callGemini(baseText);
+              if (generatedHistory.length === 0) generatedHistory.push(baseText);
+              generatedHistory.push(result);
+              historyIndex = generatedHistory.length - 1;
+              
+              updateChatInputFromHistory();
+              
+              if (generatedHistory.length > 1) {
+                  document.getElementById("f-hist-prev").style.display = "inline-block";
+                  document.getElementById("f-hist-text").style.display = "inline-block";
+                  document.getElementById("f-hist-next").style.display = "inline-block";
+              }
+          } catch (err) {
+              alert(err.message);
+          } finally {
+              icon.innerHTML = "✨"; icon.classList.remove("spin-anim");
           }
       });
+
+      document.getElementById("f-hist-prev").addEventListener("click", (e) => {
+          if (hasDragged) return;
+          if (historyIndex > 0) { historyIndex--; updateChatInputFromHistory(); }
+      });
+      document.getElementById("f-hist-next").addEventListener("click", (e) => {
+          if (hasDragged) return;
+          if (historyIndex < generatedHistory.length - 1) { historyIndex++; updateChatInputFromHistory(); }
+      });
   }
+
+  // 글로벌 엔터 감지 (히스토리 초기화용 - React의 영향 받지 않음)
+  document.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+          const target = e.target;
+          if (target.tagName === 'TEXTAREA' || target.getAttribute('contenteditable') === 'true') {
+              generatedHistory = [];
+              historyIndex = -1;
+              const prev = document.getElementById("f-hist-prev");
+              if (prev) {
+                  prev.style.display = "none";
+                  document.getElementById("f-hist-text").style.display = "none";
+                  document.getElementById("f-hist-next").style.display = "none";
+              }
+          }
+      }
+  });
 
   // =============================================
   // 5. 백그라운드 스캐너 및 유틸리티
@@ -437,8 +484,7 @@
 
   function updateContextDisplay() {
     const el = document.getElementById("detected-profile");
-    if (!el) return; // Null 방지 방어 코드
-
+    if (!el) return;
     const room = getChatRoomId();
     const name = GM_getValue("scannedCharName_" + room, "");
     const prof = GM_getValue("scannedCharProfile_" + room, "");
@@ -473,10 +519,13 @@
   };
   document.getElementById("cfg-api-provider").addEventListener("change", toggleProviderUI);
 
+  let currentRoomIdForConfig = "";
   const loadCfg = () => {
-    if (!document.getElementById("cfg-api-provider")) return; // 널 방지
-
+    if (!document.getElementById("cfg-api-provider")) return;
     const room = getChatRoomId();
+    if (currentRoomIdForConfig === room) return;
+    currentRoomIdForConfig = room;
+
     document.getElementById("cfg-api-provider").value = GM_getValue("apiProvider", "google");
     document.getElementById("cfg-api-key").value = GM_getValue("apiKey", "");
     document.getElementById("cfg-firebase-script").value = GM_getValue("firebaseScript", "");
@@ -522,45 +571,44 @@
 
   const saveCfg = () => {
     if (!document.getElementById("cfg-api-provider")) return;
+    try {
+        const room = getChatRoomId();
+        GM_setValue("apiProvider", document.getElementById("cfg-api-provider").value);
+        GM_setValue("apiKey", document.getElementById("cfg-api-key").value.trim());
+        GM_setValue("firebaseScript", document.getElementById("cfg-firebase-script").value.trim());
+        GM_setValue("cfgModel", document.getElementById("cfg-model").value);
+        GM_setValue("cfgStyle", document.getElementById("cfg-style").value);
+        GM_setValue("cfgPcNote_" + room, document.getElementById("cfg-pc-note").value.trim());
+        GM_setValue("cfgCustomRule_" + room, document.getElementById("cfg-custom-rule").value.trim());
+        GM_setValue("cfgLen", document.getElementById("cfg-len").value);
 
-    const room = getChatRoomId();
-    GM_setValue("apiProvider", document.getElementById("cfg-api-provider").value);
-    GM_setValue("apiKey", document.getElementById("cfg-api-key").value.trim());
-    GM_setValue("firebaseScript", document.getElementById("cfg-firebase-script").value.trim());
-    GM_setValue("cfgModel", document.getElementById("cfg-model").value);
-    GM_setValue("cfgStyle", document.getElementById("cfg-style").value);
-    GM_setValue("cfgPcNote_" + room, document.getElementById("cfg-pc-note").value.trim());
-    GM_setValue("cfgCustomRule_" + room, document.getElementById("cfg-custom-rule").value.trim());
-    GM_setValue("cfgLen", document.getElementById("cfg-len").value);
+        const mode = document.querySelector('input[name="cfg-mode"]:checked').value;
+        GM_setValue("cfgMode", mode);
+        const pov = document.querySelector('input[name="cfg-pov"]:checked').value;
+        GM_setValue("cfgPov", pov);
+        GM_setValue("cfgPovName", document.getElementById("cfg-pov-name").value.trim());
+        GM_setValue("cfgEgo", egoSlider.value);
 
-    const mode = document.querySelector('input[name="cfg-mode"]:checked').value;
-    GM_setValue("cfgMode", mode);
+        const activeTones = Array.from(document.querySelectorAll(".tone-chip.active")).map((c) => c.dataset.val);
+        GM_setValue("cfgTones", JSON.stringify(activeTones));
 
-    const pov = document.querySelector('input[name="cfg-pov"]:checked').value;
-    GM_setValue("cfgPov", pov);
-    GM_setValue("cfgPovName", document.getElementById("cfg-pov-name").value.trim());
+        for (let i = 1; i <= 10; i++) {
+          GM_setValue(`loreActive${i}`, document.getElementById(`lore-active-${i}`).checked);
+          GM_setValue(`loreText${i}`, document.getElementById(`lore-text-${i}`).value.trim());
+        }
+        GM_setValue("cfgMemory", document.getElementById("cfg-memory").value);
 
-    GM_setValue("cfgEgo", egoSlider.value);
-
-    const activeTones = Array.from(document.querySelectorAll(".tone-chip.active")).map((c) => c.dataset.val);
-    GM_setValue("cfgTones", JSON.stringify(activeTones));
-
-    for (let i = 1; i <= 10; i++) {
-      GM_setValue(`loreActive${i}`, document.getElementById(`lore-active-${i}`).checked);
-      GM_setValue(`loreText${i}`, document.getElementById(`lore-text-${i}`).value.trim());
+        const saveBtn = document.getElementById("cfg-save-btn");
+        const originalText = saveBtn.innerText;
+        saveBtn.innerText = "✅ 저장되었습니다!";
+        saveBtn.style.backgroundColor = "#28a745";
+        setTimeout(() => {
+            saveBtn.innerText = originalText;
+            saveBtn.style.backgroundColor = "";
+        }, 2000);
+    } catch(e) {
+        console.error("설정 저장 중 오류 발생", e);
     }
-    GM_setValue("cfgMemory", document.getElementById("cfg-memory").value);
-
-    // 🌟 모바일 호환 UX 개선: alert() 대신 버튼 UI로 부드럽게 알림! (스크립트 튕김 방지)
-    const saveBtn = document.getElementById("cfg-save-btn");
-    const originalText = saveBtn.innerText;
-    saveBtn.innerText = "✅ 저장되었습니다!";
-    saveBtn.style.backgroundColor = "#28a745"; // 초록색 변경
-    
-    setTimeout(() => {
-        saveBtn.innerText = originalText;
-        saveBtn.style.backgroundColor = ""; // 원래 색 복구
-    }, 2000);
   };
 
   document.getElementById("close-panel").onclick = () => (panel.style.display = "none");
@@ -592,7 +640,7 @@
   });
 
   // =============================================
-  // 7. Gemini API / Firebase 통신 (기존과 동일)
+  // 7. Gemini API / Firebase 통신
   // =============================================
   async function fetchChatHistory() {
     const path = location.pathname.match(/\/stories\/([^/]+)\/episodes\/([^/]+)/);
@@ -680,9 +728,7 @@
         const configRaw = GM_getValue("firebaseScript", "");
         if (!configRaw) return reject(new Error("설정에서 Firebase 복사본을 먼저 입력해주세요!"));
 
-        let configObj;
-        let fbVersion = "12.12.0";
-
+        let configObj, fbVersion = "12.12.0";
         try {
           const versionMatch = configRaw.match(/firebasejs\/([0-9.]+)\/firebase-app\.js/);
           if (versionMatch && versionMatch[1]) fbVersion = versionMatch[1];
@@ -698,9 +744,7 @@
         try {
           const appUrl = `https://www.gstatic.com/firebasejs/${fbVersion}/firebase-app.js`;
           const majorVersion = parseInt(fbVersion.split(".")[0]);
-          const aiUrl = majorVersion >= 12
-              ? `https://www.gstatic.com/firebasejs/${fbVersion}/firebase-ai.js`
-              : `https://www.gstatic.com/firebasejs/${fbVersion}/firebase-vertexai.js`;
+          const aiUrl = majorVersion >= 12 ? `https://www.gstatic.com/firebasejs/${fbVersion}/firebase-ai.js` : `https://www.gstatic.com/firebasejs/${fbVersion}/firebase-vertexai.js`;
 
           const { initializeApp, getApps, getApp } = await import(appUrl);
           let ai, generativeModel;
@@ -716,7 +760,7 @@
               { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.OFF },
               { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.OFF },
             ];
-            generativeModel = getGenerativeModel(ai, { model: model, safetySettings, systemInstruction: { parts: [{ text: sysPrompt }] }, generationConfig: { temperature: 0.8 }, });
+            generativeModel = getGenerativeModel(ai, { model: model, safetySettings, systemInstruction: { parts: [{ text: sysPrompt }] }, generationConfig: { temperature: 0.8 } });
           } else {
             const { HarmBlockThreshold, HarmCategory, getVertexAI, getGenerativeModel } = await import(aiUrl);
             const apps = getApps();
@@ -728,7 +772,7 @@
               { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.OFF },
               { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.OFF },
             ];
-            generativeModel = getGenerativeModel(ai, { model: model, safetySettings, systemInstruction: { parts: [{ text: sysPrompt }] }, generationConfig: { temperature: 0.8 }, });
+            generativeModel = getGenerativeModel(ai, { model: model, safetySettings, systemInstruction: { parts: [{ text: sysPrompt }] }, generationConfig: { temperature: 0.8 } });
           }
 
           const result = await generativeModel.generateContent(userContent);
@@ -742,7 +786,7 @@
           method: "POST",
           url: `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
           headers: { "Content-Type": "application/json" },
-          data: JSON.stringify({ system_instruction: { parts: [{ text: sysPrompt }] }, contents: [{ parts: [{ text: userContent }] }], generationConfig: { temperature: 0.8 }, }),
+          data: JSON.stringify({ system_instruction: { parts: [{ text: sysPrompt }] }, contents: [{ parts: [{ text: userContent }] }], generationConfig: { temperature: 0.8 } }),
           onload: (res) => {
             try {
               const data = JSON.parse(res.responseText);
@@ -757,105 +801,22 @@
   }
 
   // =============================================
-  // 8. UI 자동 주입 (매직 버튼 주입 및 생존 보장)
+  // 8. 인터벌 셋업 (Wrtn UI와 완벽히 독립됨)
   // =============================================
-  let currentRoomId = "";
+  initFloatingWidget();
+  ensureElementsInDOM();
+  loadCfg(); // 초기 로드
 
-  function injectUI() {
-    const newRoomId = getChatRoomId();
-    if (currentRoomId !== newRoomId) {
-      currentRoomId = newRoomId;
-      loadCfg();
-    }
-
-    const sendBtnIcon = document.querySelector('path[d*="M18.77 11.13"]');
-    const sendBtn = sendBtnIcon ? sendBtnIcon.closest("button") : null;
-
-    if (sendBtn && !document.getElementById("crack-pure-magic-btn")) {
-      const group = document.createElement("div");
-      group.className = "crack-right-group";
-      sendBtn.parentNode.insertBefore(group, sendBtn);
-
-      const hWidget = document.createElement("div");
-      hWidget.id = "crack-history-widget";
-      hWidget.className = "crack-history-widget";
-      hWidget.innerHTML = `<span class="crack-history-btn" id="history-prev">◀</span><span id="history-text">1/1</span><span class="crack-history-btn" id="history-next">▶</span>`;
-      group.appendChild(hWidget);
-
-      const gBtn = document.createElement("button");
-      gBtn.id = "crack-pure-magic-btn";
-      gBtn.className = "crack-pure-magic";
-      gBtn.innerHTML = `<span id="magic-icon" style="font-size: 14px;">✨</span>`;
-
-      const updateChatInputFromHistory = () => {
-        const chatInput = document.querySelector('.__chat_input_textarea, div[contenteditable="true"], textarea');
-        if (!chatInput || generatedHistory.length === 0) return;
-        const textToInsert = generatedHistory[historyIndex];
-
-        if (chatInput.tagName === "TEXTAREA") {
-          const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
-          setter.call(chatInput, textToInsert);
-          chatInput.style.height = "auto";
-          chatInput.style.height = chatInput.scrollHeight + "px";
-        } else chatInput.innerHTML = `<p>${textToInsert}</p>`;
-        
-        chatInput.dispatchEvent(new Event("input", { bubbles: true }));
-        chatInput.focus();
-        document.getElementById("history-text").innerText = `${historyIndex + 1}/${generatedHistory.length}`;
-      };
-
-      hWidget.querySelector("#history-prev").onclick = (e) => { e.preventDefault(); if (historyIndex > 0) { historyIndex--; updateChatInputFromHistory(); } };
-      hWidget.querySelector("#history-next").onclick = (e) => { e.preventDefault(); if (historyIndex < generatedHistory.length - 1) { historyIndex++; updateChatInputFromHistory(); } };
-
-      gBtn.onclick = async (e) => {
-        e.preventDefault();
-        const chatInput = document.querySelector('.__chat_input_textarea, div[contenteditable="true"], textarea');
-        if (!chatInput) return alert("채팅 입력창을 찾을 수 없습니다.");
-
-        const baseText = chatInput.tagName === "TEXTAREA" ? chatInput.value.trim() : chatInput.innerText.trim();
-        const icon = document.getElementById("magic-icon");
-        icon.innerHTML = "⏳";
-        icon.classList.add("spin-anim");
-
-        try {
-          const result = await callGemini(baseText);
-          if (generatedHistory.length === 0) generatedHistory.push(baseText);
-          generatedHistory.push(result);
-          historyIndex = generatedHistory.length - 1;
-          ensurePanelInDOM();
-          updateContextDisplay();
-          updateChatInputFromHistory();
-          if (generatedHistory.length > 1) hWidget.style.display = "flex";
-        } catch (err) { alert(err.message); } 
-        finally { icon.innerHTML = "✨"; icon.classList.remove("spin-anim"); }
-      };
-
-      group.appendChild(gBtn);
-      group.appendChild(sendBtn);
-      sendBtn.addEventListener("click", () => { generatedHistory = []; historyIndex = -1; hWidget.style.display = "none"; });
-    }
-
-    const chatInput = document.querySelector('.__chat_input_textarea, div[contenteditable="true"], textarea');
-    if (chatInput && !chatInput.dataset.historyHooked) {
-      chatInput.dataset.historyHooked = "true";
-      chatInput.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" && !e.shiftKey) { generatedHistory = []; historyIndex = -1; const w = document.getElementById("crack-history-widget"); if (w) w.style.display = "none"; }
-      });
-    }
-  }
-
-  // =============================================
-  // 9. 인터벌 실행 (웹앱에 의한 UI 삭제 자동 방어)
-  // =============================================
-  initFloatingButton();
-  
   setInterval(() => {
     backgroundScanner();
-    ensurePanelInDOM(); // 메인 설정창이 삭제되었다면 자동 복구
-    if (!document.getElementById("crack-floating-btn")) {
-        initFloatingButton(); // 플로팅 버튼이 삭제되었다면 자동 복구
+    ensureElementsInDOM();
+    if (!document.getElementById("crack-floating-widget")) {
+        initFloatingWidget();
     }
-    injectUI();
+    const newRoomId = getChatRoomId();
+    if (currentRoomIdForConfig !== newRoomId) {
+        loadCfg();
+    }
   }, 1000);
 
 })();
