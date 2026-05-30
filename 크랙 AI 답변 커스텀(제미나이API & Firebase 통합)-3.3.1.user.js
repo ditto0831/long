@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         크랙 AI 답변 커스텀(제미나이API & Firebase 통합) - 플로팅 버튼 패치
+// @name         크랙 AI 답변 커스텀(제미나이API & Firebase 통합) - 모바일 플로팅 완벽 패치
 // @namespace    http://tampermonkey.net/
-// @version      3.3.2
-// @description  명령어 퀄리티 극대화, 자유롭게 이동 가능한 플로팅 설정 버튼 적용
+// @version      3.3.3
+// @description  플로팅 버튼 모바일 터치 드래그 지원 및 초기 위치 개선
 // @match        https://crack.wrtn.ai/*
 // @grant        GM_addStyle
 // @grant        GM_setValue
@@ -31,27 +31,28 @@
   // 1. 스타일 (플로팅 버튼 UI 추가)
   // =============================================
   GM_addStyle(`
-        /* 🌟 새로 추가된 플로팅 설정 버튼 */
+        /* 🌟 플로팅 설정 버튼 (초기 위치를 우측 상단으로 변경하여 입력창 간섭 방지) */
         #crack-floating-btn {
-            position: fixed; bottom: 30px; left: 30px; z-index: 999998;
-            background-color: var(--surface_brand_primary, #6A3DE8); color: white;
-            padding: 12px 18px; border-radius: 50px;
+            position: fixed; top: 120px; right: 20px; z-index: 999998;
+            background-color: var(--surface_brand_primary, #ff4a4a); color: white;
+            padding: 10px 16px; border-radius: 50px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            font-size: 14px; font-weight: bold; font-family: var(--font-sans);
+            font-size: 13px; font-weight: bold; font-family: var(--font-sans);
             display: flex; align-items: center; gap: 8px;
             cursor: grab; user-select: none; transition: background-color 0.2s, transform 0.2s;
+            touch-action: none; /* 모바일 브라우저 기본 스와이프 방지 */
         }
-        #crack-floating-btn:hover { background-color: #5228CC; transform: scale(1.05); }
+        #crack-floating-btn:hover { filter: brightness(0.9); transform: scale(1.05); }
         #crack-floating-btn:active { cursor: grabbing; transform: scale(0.95); }
 
         /* 채팅창 내 매직 버튼 및 위젯 */
         .crack-right-group { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
         .crack-pure-magic {
             height: 1.75rem; width: 1.75rem; min-width: 1.75rem; border-radius: 9999px;
-            background-color: #6A3DE8; color: white; display: inline-flex; align-items: center; justify-content: center;
+            background-color: var(--surface_brand_primary, #ff4a4a); color: white; display: inline-flex; align-items: center; justify-content: center;
             cursor: pointer; border: none; padding: 0; box-shadow: 0 4px 6px var(--shadow-md); transition: all 0.2s;
         }
-        .crack-pure-magic:hover { transform: scale(1.1); background-color: #5228CC; }
+        .crack-pure-magic:hover { transform: scale(1.1); filter: brightness(0.9); }
 
         .crack-history-widget {
             display: none; align-items: center; gap: 8px;
@@ -73,7 +74,7 @@
         .panel-header {
             padding: 16px 20px; background-color: var(--bg_elevated_primary);
             border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;
-            cursor: move; user-select: none;
+            cursor: move; user-select: none; touch-action: none;
         }
         .panel-title { font-size: 16px; font-weight: 800; color: var(--text_brand); display: flex; align-items: center; gap: 6px; }
         .panel-close { cursor: pointer; font-size: 18px; color: var(--text_secondary); transition: 0.2s; padding: 0 5px; }
@@ -107,7 +108,7 @@
             font-size: 13px; cursor: pointer; color: var(--text_secondary); background: var(--bg_elevated_primary); transition: 0.2s;
         }
         .tone-chip:hover { border-color: var(--text_secondary); }
-        .tone-chip.active { background-color: #6A3DE8; color: white; border-color: #6A3DE8; font-weight: bold; }
+        .tone-chip.active { background-color: var(--surface_brand_primary, #ff4a4a); color: white; border-color: transparent; font-weight: bold; }
 
         .acc-wrapper { display: flex; flex-direction: column; gap: 0; }
         .acc-header {
@@ -135,7 +136,7 @@
         .ego-slider-box { display: flex; flex-direction: column; gap: 6px; padding: 10px; background: var(--bg_elevated_primary); border: 1px solid var(--border); border-radius: 8px; }
         .ego-desc { font-size: 11px; text-align: center; color: var(--text_brand); font-weight: bold; }
 
-        .btn-save { width: 100%; background: var(--surface_brand_primary); color: white; border: none; padding: 14px; border-radius: 10px; cursor: pointer; font-weight: 800; font-size: 15px; transition: 0.2s; letter-spacing: 1px; }
+        .btn-save { width: 100%; background: var(--surface_brand_primary, #ff4a4a); color: white; border: none; padding: 14px; border-radius: 10px; cursor: pointer; font-weight: 800; font-size: 15px; transition: 0.2s; letter-spacing: 1px; }
         .btn-save:hover { opacity: 0.9; transform: translateY(-2px); }
 
         @keyframes crack-spin { 100% { transform: rotate(360deg); } }
@@ -161,7 +162,7 @@
   panel.id = "crack-ai-panel";
   panel.innerHTML = `
         <div class="panel-header" id="panel-drag-handle">
-            <div class="panel-title">✨ AI 집필 설정 (V3.3.2)</div>
+            <div class="panel-title">✨ AI 설정 (V3.3.3)</div>
             <div class="panel-close" id="close-panel">✕</div>
         </div>
         <div class="panel-content">
@@ -285,7 +286,7 @@
   document.body.appendChild(panel);
 
   // =============================================
-  // 3. 패널 드래그 관리 (기존 패널 창)
+  // 3. 메인 설정 패널 드래그 (마우스 & 터치 동시 지원)
   // =============================================
   const dragHandle = document.getElementById("panel-drag-handle");
   let isDragging = false, startX, startY, initLeft, initTop;
@@ -293,45 +294,54 @@
   let savedLeft = GM_getValue("panelLeft", null);
   let savedTop = GM_getValue("panelTop", null);
   if (savedLeft !== null && savedTop !== null) {
-    if (isNaN(savedLeft) || isNaN(savedTop) || savedLeft < 0 || savedTop < 0 || savedLeft > window.innerWidth || savedTop > window.innerHeight) {
-      GM_deleteValue("panelLeft");
-      GM_deleteValue("panelTop");
-    } else {
+    if (!isNaN(savedLeft) && !isNaN(savedTop)) {
       panel.style.left = savedLeft + "px";
       panel.style.top = savedTop + "px";
       panel.style.right = "auto";
     }
   }
 
-  dragHandle.addEventListener("mousedown", (e) => {
+  const startPanelDrag = (e) => {
     isDragging = true;
-    startX = e.clientX;
-    startY = e.clientY;
+    startX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+    startY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
     const rect = panel.getBoundingClientRect();
     initLeft = rect.left;
     initTop = rect.top;
-  });
+  };
 
-  document.addEventListener("mousemove", (e) => {
+  const onPanelDrag = (e) => {
     if (!isDragging) return;
     e.preventDefault();
-    let newLeft = Math.max(0, Math.min(initLeft + (e.clientX - startX), window.innerWidth - panel.offsetWidth));
-    let newTop = Math.max(0, Math.min(initTop + (e.clientY - startY), window.innerHeight - panel.offsetHeight));
+    const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+    const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+    
+    let newLeft = Math.max(0, Math.min(initLeft + (clientX - startX), window.innerWidth - panel.offsetWidth));
+    let newTop = Math.max(0, Math.min(initTop + (clientY - startY), window.innerHeight - panel.offsetHeight));
     panel.style.left = newLeft + "px";
     panel.style.top = newTop + "px";
     panel.style.right = "auto";
-  });
+  };
 
-  document.addEventListener("mouseup", () => {
+  const stopPanelDrag = () => {
     if (isDragging) {
       isDragging = false;
       GM_setValue("panelLeft", parseInt(panel.style.left));
       GM_setValue("panelTop", parseInt(panel.style.top));
     }
-  });
+  };
+
+  dragHandle.addEventListener("mousedown", startPanelDrag);
+  dragHandle.addEventListener("touchstart", startPanelDrag, { passive: true });
+
+  document.addEventListener("mousemove", onPanelDrag, { passive: false });
+  document.addEventListener("touchmove", onPanelDrag, { passive: false });
+
+  document.addEventListener("mouseup", stopPanelDrag);
+  document.addEventListener("touchend", stopPanelDrag);
 
   // =============================================
-  // 4. 새로운 플로팅 버튼 생성 및 드래그 관리
+  // 4. 새로운 플로팅 버튼 생성 및 드래그 (마우스 & 터치 완벽 지원)
   // =============================================
   function initFloatingButton() {
       if (document.getElementById("crack-floating-btn")) return;
@@ -347,40 +357,44 @@
       if (sLeft !== null && sTop !== null) {
           fBtn.style.left = sLeft + "px";
           fBtn.style.top = sTop + "px";
-          fBtn.style.bottom = "auto"; // 기본 bottom 값을 해제
+          fBtn.style.bottom = "auto";
+          fBtn.style.right = "auto";
       }
 
       let isFDragging = false;
       let hasDragged = false;
       let fStartX, fStartY, fInitLeft, fInitTop;
 
-      fBtn.addEventListener("mousedown", (e) => {
+      const startFDrag = (e) => {
           isFDragging = true;
           hasDragged = false;
-          fStartX = e.clientX;
-          fStartY = e.clientY;
+          fStartX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+          fStartY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
           const rect = fBtn.getBoundingClientRect();
           fInitLeft = rect.left;
           fInitTop = rect.top;
-      });
+      };
 
-      document.addEventListener("mousemove", (e) => {
+      const onFDrag = (e) => {
           if (!isFDragging) return;
-          // 마우스를 조금이라도 움직이면 드래그로 판정 (단순 클릭과 구분)
-          if (Math.abs(e.clientX - fStartX) > 3 || Math.abs(e.clientY - fStartY) > 3) {
+          const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+          const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+          
+          if (Math.abs(clientX - fStartX) > 5 || Math.abs(clientY - fStartY) > 5) {
               hasDragged = true;
           }
           if (hasDragged) {
-              e.preventDefault();
-              let newLeft = Math.max(0, Math.min(fInitLeft + (e.clientX - fStartX), window.innerWidth - fBtn.offsetWidth));
-              let newTop = Math.max(0, Math.min(fInitTop + (e.clientY - fStartY), window.innerHeight - fBtn.offsetHeight));
+              e.preventDefault(); // 드래그 중 화면 스크롤 방지
+              let newLeft = Math.max(0, Math.min(fInitLeft + (clientX - fStartX), window.innerWidth - fBtn.offsetWidth));
+              let newTop = Math.max(0, Math.min(fInitTop + (clientY - fStartY), window.innerHeight - fBtn.offsetHeight));
               fBtn.style.left = newLeft + "px";
               fBtn.style.top = newTop + "px";
-              fBtn.style.bottom = "auto"; 
+              fBtn.style.bottom = "auto";
+              fBtn.style.right = "auto";
           }
-      });
+      };
 
-      document.addEventListener("mouseup", () => {
+      const stopFDrag = () => {
           if (isFDragging) {
               isFDragging = false;
               if (hasDragged) {
@@ -388,9 +402,19 @@
                   GM_setValue("fBtnTop", parseInt(fBtn.style.top));
               }
           }
-      });
+      };
 
-      // 드래그가 아닌 단순 클릭 시 패널 열기/닫기
+      // PC 마우스 이벤트
+      fBtn.addEventListener("mousedown", startFDrag);
+      document.addEventListener("mousemove", onFDrag, { passive: false });
+      document.addEventListener("mouseup", stopFDrag);
+
+      // 모바일 터치 이벤트
+      fBtn.addEventListener("touchstart", startFDrag, { passive: true });
+      document.addEventListener("touchmove", onFDrag, { passive: false });
+      document.addEventListener("touchend", stopFDrag);
+
+      // 드래그가 아닌 단순 터치/클릭 시 창 열기
       fBtn.addEventListener("click", (e) => {
           if (!hasDragged) {
               updateContextDisplay();
@@ -414,13 +438,8 @@
       if (container) {
         const nameEl = container.querySelector('p[color="text_primary"]');
         const profileEl = container.querySelector('p[color="text_secondary"]');
-        if (nameEl)
-          GM_setValue("scannedCharName_" + room, nameEl.textContent.trim());
-        if (profileEl)
-          GM_setValue(
-            "scannedCharProfile_" + room,
-            profileEl.textContent.trim(),
-          );
+        if (nameEl) GM_setValue("scannedCharName_" + room, nameEl.textContent.trim());
+        if (profileEl) GM_setValue("scannedCharProfile_" + room, profileEl.textContent.trim());
       }
     }
   }
@@ -461,8 +480,7 @@
     if (provider === "firebase") {
       document.getElementById("cfg-api-key").style.display = "none";
       document.getElementById("cfg-firebase-script").style.display = "block";
-      document.getElementById("cfg-key-label").innerText =
-        "Firebase Config 복붙창:";
+      document.getElementById("cfg-key-label").innerText = "Firebase Config 복붙창:";
     } else {
       document.getElementById("cfg-api-key").style.display = "block";
       document.getElementById("cfg-firebase-script").style.display = "none";
@@ -481,7 +499,7 @@
     document.getElementById("cfg-style").value = GM_getValue("cfgStyle", "기본");
     document.getElementById("cfg-pc-note").value = GM_getValue("cfgPcNote_" + room, "");
     document.getElementById("cfg-custom-rule").value = GM_getValue("cfgCustomRule_" + room, "");
-    
+
     const lenVal = GM_getValue("cfgLen", 3);
     document.getElementById("cfg-len").value = lenVal;
     document.getElementById("len-val").innerText = lenVal;
@@ -579,7 +597,7 @@
   });
 
   // =============================================
-  // 7. Gemini API / Firebase 통신
+  // 7. Gemini API / Firebase 통신 (기존과 동일)
   // =============================================
   async function fetchChatHistory() {
     const path = location.pathname.match(/\/stories\/([^/]+)\/episodes\/([^/]+)/);
@@ -630,7 +648,6 @@
       }
 
       let povInstruct = pov === "1" ? "1인칭('나') 시점으로 서술" : `${povName || name || "캐릭터"} 중심의 3인칭 시점으로 서술`;
-
       let lenInstruction = `전체 길이를 반드시 ${len}문단 내외로 배분하여 작성하십시오.`;
       if (len == 1) lenInstruction = "전체 길이를 반드시 1문단 이내로 제한하여 아주 짧고 속도감 있게 작성하십시오.";
       else if (len == 5) lenInstruction = "전체 길이를 최소 5~6문단 이상으로 아주 길고 볼륨감 있게 꽉꽉 채워서 작성하십시오. 분량을 아끼지 마십시오.";
@@ -639,14 +656,11 @@
       if (pcNote) sysPrompt += `3. PC(플레이어) 추가 설정: ${pcNote}\n`;
       if (customRule) sysPrompt += `4. 커스텀 규칙: ${customRule} (이 규칙을 최우선으로 반영하세요!)\n`;
       if (activeLores.length > 0) sysPrompt += `5. 절대 세계관: \n${activeLores.join("\n")}\n`;
-
       sysPrompt += `6. 타 캐릭터 조종 방지: 상대방(NPC)의 대사를 임의로 지어내거나 깊은 내면을 서술하지 마십시오. 상대방의 행동은 사용자의 시야에 보이는 객관적이고 짧은 리액션 정도로 제한하십시오.\n`;
 
-      if (mode === "polish") {
-        sysPrompt += `7. 작업 모드 (다듬기): 대충 적힌 뼈대 문장의 의도를 정확히 파악하여, 문맥을 매끄럽게 연결하고 선택한 문체에 맞춰 어휘를 고급스럽게 윤문하십시오.\n`;
-      } else {
-        sysPrompt += `7. 작업 모드 (부풀리기): 전문 웹소설 작가의 화려하고 몰입감 있는 문체로 상황을 풍성하게 묘사하십시오. 피부로 느끼는 공기의 온도, 시선의 떨림 등 오감 묘사와 겉으로 드러나는 행동 이면에 깔린 감정선을 서술하여 씬의 밀도를 극대화하십시오.\n`;
-      }
+      if (mode === "polish") sysPrompt += `7. 작업 모드 (다듬기): 대충 적힌 뼈대 문장의 의도를 정확히 파악하여, 문맥을 매끄럽게 연결하고 선택한 문체에 맞춰 어휘를 고급스럽게 윤문하십시오.\n`;
+      else sysPrompt += `7. 작업 모드 (부풀리기): 전문 웹소설 작가의 화려하고 몰입감 있는 문체로 상황을 풍성하게 묘사하십시오. 피부로 느끼는 공기의 온도, 시선의 떨림 등 오감 묘사와 겉으로 드러나는 행동 이면에 깔린 감정선을 서술하여 씬의 밀도를 극대화하십시오.\n`;
+      
       sysPrompt += `8. 출력 분량 통제: ${lenInstruction}\n`;
 
       let egoInstruction = "9. 대사 개입 및 상황 전개 지시: \n";
@@ -692,15 +706,14 @@
           if (versionMatch && versionMatch[1]) fbVersion = versionMatch[1];
 
           const match = configRaw.match(/const\s+firebaseConfig\s*=\s*({[\s\S]*?});/);
-          if (match && match[1]) {
-            configObj = new Function("return " + match[1])();
-          } else {
+          if (match && match[1]) configObj = new Function("return " + match[1])();
+          else {
             const fallbackMatch = configRaw.match(/({[\s\S]*?apiKey[\s\S]*?appId[\s\S]*?})/);
             if (fallbackMatch && fallbackMatch[1]) configObj = new Function("return " + fallbackMatch[1])();
             else throw new Error("형식 오류");
           }
         } catch (e) {
-          return reject(new Error("Firebase 코드를 해독하지 못했습니다. 파이어베이스 홈페이지에서 준 <script> 태그 포함된 코드를 그대로 넣어주세요."));
+          return reject(new Error("Firebase 코드를 해독하지 못했습니다."));
         }
 
         try {
@@ -727,8 +740,7 @@
             ];
 
             generativeModel = getGenerativeModel(ai, {
-              model: model,
-              safetySettings,
+              model: model, safetySettings,
               systemInstruction: { parts: [{ text: sysPrompt }] },
               generationConfig: { temperature: 0.8 },
             });
@@ -746,8 +758,7 @@
             ];
 
             generativeModel = getGenerativeModel(ai, {
-              model: model,
-              safetySettings,
+              model: model, safetySettings,
               systemInstruction: { parts: [{ text: sysPrompt }] },
               generationConfig: { temperature: 0.8 },
             });
@@ -782,9 +793,7 @@
                 raw = raw.replace(/^```[^\n]*\n([\s\S]*?)\n```\s*$/m, "$1").trim();
                 resolve(raw);
               }
-            } catch (e) {
-              reject(new Error("응답 분석 실패"));
-            }
+            } catch (e) { reject(new Error("응답 분석 실패")); }
           },
           onerror: () => reject(new Error("네트워크 오류")),
         });
@@ -804,7 +813,6 @@
       loadCfg();
     }
 
-    // 마법 버튼(✨) 주입을 위한 전송 버튼 찾기
     const sendBtnIcon = document.querySelector('path[d*="M18.77 11.13"]');
     const sendBtn = sendBtnIcon ? sendBtnIcon.closest("button") : null;
 
@@ -872,13 +880,9 @@
           historyIndex = generatedHistory.length - 1;
           updateContextDisplay();
           updateChatInputFromHistory();
-
-          if (generatedHistory.length > 1) {
-            hWidget.style.display = "flex";
-          }
-        } catch (err) {
-          alert(err.message);
-        } finally {
+          if (generatedHistory.length > 1) hWidget.style.display = "flex";
+        } catch (err) { alert(err.message); } 
+        finally {
           icon.innerHTML = "✨";
           icon.classList.remove("spin-anim");
         }
