@@ -4,6 +4,7 @@
 // @version      3.3.1
 // @description  명령어 퀄리티 극대화, 설정 버튼 반응형(모바일) UI 패치, Firebase Vertex API 지원 추가
 // @match        https://crack.wrtn.ai/*
+// @run-at       document-idle
 // @grant        GM_addStyle
 // @grant        GM_setValue
 // @grant        GM_getValue
@@ -957,12 +958,17 @@
   let currentRoomId = "";
 
   function injectUI() {
-  const newRoomId = getChatRoomId();
+const newRoomId = getChatRoomId();
 
-  if (currentRoomId !== newRoomId) {
-    currentRoomId = newRoomId;
+if (currentRoomId !== newRoomId) {
+  currentRoomId = newRoomId;
+
+  try {
     loadCfg();
+  } catch (err) {
+    console.warn("[Crack AI] loadCfg 실패, 버튼 생성은 계속 진행합니다:", err);
   }
+}
 
   // 모바일/PC 입력창 탐색 함수
   const findChatInput = () => {
