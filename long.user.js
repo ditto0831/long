@@ -674,7 +674,7 @@
 
   function callGemini(baseText) {
     return new Promise(async (resolve, reject) => {
-      const provider = GM_getValue("apiProvider", "google");
+      const provider = "google";
       const room = getChatRoomId();
       const history = await fetchChatHistory();
       const model = GM_getValue("cfgModel", "gemini-3.1-pro-preview");
@@ -829,7 +829,8 @@
               ? `https://www.gstatic.com/firebasejs/${fbVersion}/firebase-ai.js`
               : `https://www.gstatic.com/firebasejs/${fbVersion}/firebase-vertexai.js`;
 
-          const { initializeApp, getApps, getApp } = await import(appUrl);
+          const dynamicImport = new Function("url", "return import(url)");
+          const { initializeApp, getApps, getApp } = await dynamicImport(appUrl);
           let ai, generativeModel;
 
           if (majorVersion >= 12) {
@@ -839,7 +840,7 @@
               getAI,
               getGenerativeModel,
               VertexAIBackend,
-            } = await import(aiUrl);
+            } = await dynamicImport(aiUrl);
             const apps = getApps();
             const app = apps.length === 0 ? initializeApp(configObj) : getApp();
             ai = getAI(app, { backend: new VertexAIBackend("global") });
@@ -875,7 +876,7 @@
               HarmCategory,
               getVertexAI,
               getGenerativeModel,
-            } = await import(aiUrl);
+            } = await dynamicImport(aiUrl);
             const apps = getApps();
             const app = apps.length === 0 ? initializeApp(configObj) : getApp();
             ai = getVertexAI(app);
