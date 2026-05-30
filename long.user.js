@@ -54,34 +54,35 @@
     flex-shrink: 0;
 }
 
-/* 🌟 채팅창 내부가 아니라 화면 위에 떠 있는 외부 플로팅 버튼 바 */
 #crack-ai-floating-toolbar.crack-right-group {
-    position: fixed;
-    right: 16px;
-    bottom: 180px;
-    z-index: 999998;
-    padding: 8px 10px;
-    border-radius: 9999px;
-    border: 1px solid var(--border, rgba(255,255,255,0.14));
-    background: var(--bg_elevated_primary, rgba(24,24,28,0.92));
-    box-shadow: 0 10px 24px rgba(0,0,0,0.32);
+    position: fixed !important;
+    right: 20px !important;
+    bottom: 120px !important;
+    z-index: 999999 !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    padding: 8px 10px !important;
+    border-radius: 9999px !important;
+    border: 1px solid rgba(255,255,255,0.18) !important;
+    background: rgba(24,24,28,0.96) !important;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.35) !important;
     backdrop-filter: blur(10px);
+    touch-action: none;
 }
 
 #crack-ai-floating-toolbar .crack-history-widget {
-    background: transparent;
-    border: none;
-    padding: 0 6px;
+    background: transparent !important;
+    border: none !important;
+    padding: 0 6px !important;
 }
 
 @media (max-width: 768px) {
     #crack-ai-floating-toolbar.crack-right-group {
-        right: 12px;
-        bottom: 180px;
-        padding: 6px 8px;
+        right: 20px !important;
+        bottom: 120px !important;
     }
-}
-        .crack-pure-magic {
+}        .crack-pure-magic {
             height: 1.75rem; width: 1.75rem; min-width: 1.75rem; border-radius: 9999px;
             background-color: #6A3DE8; color: white; display: inline-flex; align-items: center; justify-content: center;
             cursor: pointer; border: none; padding: 0; box-shadow: 0 4px 6px var(--shadow-md); transition: all 0.2s;
@@ -957,6 +958,7 @@
 
   function injectUI() {
   const newRoomId = getChatRoomId();
+
   if (currentRoomId !== newRoomId) {
     currentRoomId = newRoomId;
     loadCfg();
@@ -965,8 +967,9 @@
   // 모바일/PC 입력창 탐색 함수
   const findChatInput = () => {
     const selectors = [
-      '.__chat_input_textarea',
+      'textarea[placeholder*="메시지"]',
       'textarea',
+      '.__chat_input_textarea',
       'div[contenteditable="true"]',
       '[contenteditable="true"]',
       '[role="textbox"]',
@@ -984,15 +987,17 @@
     return null;
   };
 
-  // 전송 버튼 탐색 함수
+  // 모바일/PC 전송 버튼 탐색 함수
   const findSendButton = () => {
     const sendBtnIcon = document.querySelector('path[d*="M18.77 11.13"]');
     if (sendBtnIcon) return sendBtnIcon.closest("button");
 
     const buttons = Array.from(document.querySelectorAll("button"));
+
     return buttons.find((btn) => {
       const txt = btn.textContent.trim();
       const aria = btn.getAttribute("aria-label") || "";
+
       return (
         txt.includes("전송") ||
         txt.includes("보내기") ||
@@ -1003,7 +1008,7 @@
     });
   };
 
-  // 1. 플로팅 툴바는 입력창 탐색 성공 여부와 상관없이 무조건 생성
+  // 핵심: 사이트 내부 DOM을 찾지 않아도 플로팅 툴바는 무조건 생성
   let group = document.getElementById("crack-ai-floating-toolbar");
 
   if (!group) {
@@ -1013,7 +1018,7 @@
     document.body.appendChild(group);
   }
 
-  // 2. 설정 버튼도 플로팅 툴바에 같이 생성
+  // AI 설정 버튼도 model-icon 옆에 붙이지 말고 플로팅 툴바에 직접 생성
   if (!document.getElementById("crack-pure-settings-btn")) {
     const sBtn = document.createElement("button");
     sBtn.id = "crack-pure-settings-btn";
@@ -1031,7 +1036,7 @@
     group.appendChild(sBtn);
   }
 
-  // 3. 히스토리 위젯 생성
+  // 히스토리 위젯 생성
   if (!document.getElementById("crack-history-widget")) {
     const hWidget = document.createElement("div");
     hWidget.id = "crack-history-widget";
@@ -1047,7 +1052,7 @@
 
   const hWidget = document.getElementById("crack-history-widget");
 
-  // 4. 마법 버튼 생성
+  // 마법 버튼 생성
   if (!document.getElementById("crack-pure-magic-btn")) {
     const gBtn = document.createElement("button");
     gBtn.id = "crack-pure-magic-btn";
@@ -1057,6 +1062,7 @@
 
     const updateChatInputFromHistory = () => {
       const chatInput = findChatInput();
+
       if (!chatInput || generatedHistory.length === 0) return;
 
       const textToInsert = generatedHistory[historyIndex];
@@ -1120,9 +1126,7 @@
       const chatInput = findChatInput();
 
       if (!chatInput) {
-        alert(
-          "채팅 입력창을 찾을 수 없습니다. 입력창을 한 번 터치한 뒤 다시 눌러주세요.",
-        );
+        alert("채팅 입력창을 찾을 수 없습니다. 입력창을 한 번 터치한 뒤 다시 눌러주세요.");
         return;
       }
 
@@ -1161,7 +1165,7 @@
     group.appendChild(gBtn);
   }
 
-  // 5. 전송 버튼 클릭 시 히스토리 초기화
+  // 전송 버튼 클릭 시 히스토리 초기화
   const sendBtn = findSendButton();
 
   if (sendBtn && !sendBtn.dataset.historyResetHooked) {
@@ -1176,7 +1180,7 @@
     });
   }
 
-  // 6. 입력창 엔터 전송 시 히스토리 초기화
+  // 입력창 엔터 전송 시 히스토리 초기화
   const chatInput = findChatInput();
 
   if (chatInput && !chatInput.dataset.historyHooked) {
@@ -1194,8 +1198,10 @@
   }
 }
 
-  setInterval(() => {
-    backgroundScanner();
-    injectUI();
-  }, 1000);
+injectUI();
+
+setInterval(() => {
+  backgroundScanner();
+  injectUI();
+}, 1000);
 })();
